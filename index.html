@@ -682,9 +682,9 @@
         function calculatePricing() {
             const basePing = parseInt(document.getElementById('base_ping').value) || 15;
             
-            if (basePing < 12 || basePing > 20) {
+            if (basePing < 12 || basePing > 40) {
                 document.getElementById('pricing-display').innerHTML = 
-                    '<p class="text-danger">基準坪數必須在12-20坪之間</p>';
+                    '<p class="text-danger">基準坪數必須在12-40坪之間</p>';
                 return;
             }
 
