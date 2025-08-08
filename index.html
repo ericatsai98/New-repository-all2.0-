@@ -276,18 +276,17 @@
                                 填入所需長度（尺）或數量
                             </div>
                             <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="bed_frame_length" class="form-label">床架 - 長度</label>
-                                    <div class="input-group">
-                                        <input type="number" class="form-control" id="bed_frame_length" min="0" step="0.1" value="0" onchange="calculatePricing()">
-                                        <span class="input-group-text">尺</span>
-                                    </div>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="bed_frame_width" class="form-label">床架 - 寬度</label>
-                                    <div class="input-group">
-                                        <input type="number" class="form-control" id="bed_frame_width" min="0" step="0.1" value="0" onchange="calculatePricing()">
-                                        <span class="input-group-text">尺</span>
+                                <div class="col-12 mb-3">
+                                    <label class="form-label fw-bold">床架配置 (長 × 寬 = 金額)</label>
+                                    <div class="card bg-secondary">
+                                        <div class="card-body">
+                                            <div id="bed-frames-container">
+                                                <!-- 床架組會動態添加到這裡 -->
+                                            </div>
+                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="addBedFrame()">
+                                                <i class="fas fa-plus me-1"></i>新增床架
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="col-md-6 mb-3">
@@ -653,8 +652,61 @@
         document.addEventListener('DOMContentLoaded', function() {
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('date').value = today;
+            // 添加第一組床架輸入框
+            addBedFrame();
             calculatePricing();
         });
+
+        // 床架管理函數
+        let bedFrameCounter = 0;
+        
+        function addBedFrame() {
+            bedFrameCounter++;
+            const container = document.getElementById('bed-frames-container');
+            const bedFrameGroup = document.createElement('div');
+            bedFrameGroup.className = 'bed-frame-group row mb-2 p-2 border rounded';
+            bedFrameGroup.innerHTML = `
+                <div class="col-md-4 mb-2">
+                    <label class="form-label small">床架${bedFrameCounter} - 長度</label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" class="form-control bed-frame-length" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                        <span class="input-group-text">尺</span>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="form-label small">寬度</label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" class="form-control bed-frame-width" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                        <span class="input-group-text">尺</span>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeBedFrame(this)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(bedFrameGroup);
+            calculatePricing();
+        }
+        
+        function removeBedFrame(button) {
+            const bedFrameGroups = document.querySelectorAll('.bed-frame-group');
+            if (bedFrameGroups.length > 1) {
+                button.closest('.bed-frame-group').remove();
+                // 重新編號
+                updateBedFrameNumbers();
+                calculatePricing();
+            }
+        }
+        
+        function updateBedFrameNumbers() {
+            const bedFrameGroups = document.querySelectorAll('.bed-frame-group');
+            bedFrameGroups.forEach((group, index) => {
+                const label = group.querySelector('label');
+                label.textContent = `床架${index + 1} - 長度`;
+            });
+        }
 
         // 切換輸入框顯示
         function toggleInput(itemId) {
@@ -748,13 +800,22 @@
             // 系統櫃配置
             let systemTotal = 0;
             
-            // 床架特殊計算 (長 × 寬 = 金額)
-            const bedLength = parseFloat(document.getElementById('bed_frame_length').value) || 0;
-            const bedWidth = parseFloat(document.getElementById('bed_frame_width').value) || 0;
-            if (bedLength > 0 && bedWidth > 0) {
-                const bedFrameAmount = bedLength * bedWidth;
-                items['床架'] = bedFrameAmount;
-                systemTotal += bedFrameAmount;
+            // 床架特殊計算 (長 × 寬 = 金額) - 支援多組
+            let totalBedFrameAmount = 0;
+            const bedFrameElements = document.querySelectorAll('.bed-frame-group');
+            bedFrameElements.forEach((group, index) => {
+                const lengthInput = group.querySelector('.bed-frame-length');
+                const widthInput = group.querySelector('.bed-frame-width');
+                const length = parseFloat(lengthInput.value) || 0;
+                const width = parseFloat(widthInput.value) || 0;
+                if (length > 0 && width > 0) {
+                    const amount = length * width;
+                    items[`床架${index + 1} (${length}×${width}尺)`] = amount;
+                    totalBedFrameAmount += amount;
+                }
+            });
+            if (totalBedFrameAmount > 0) {
+                systemTotal += totalBedFrameAmount;
             }
 
             const systemItems = [
