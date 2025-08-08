@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>室內裝修報價系統 - 完整版</title>
+    <!-- 阻止搜尋引擎索引 -->
+    <meta name="robots" content="noindex, nofollow">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/darkly/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+        }
+        .display-4 {
+            font-weight: 600;
+            color: var(--bs-primary);
+        }
+        .card {
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            margin-bottom: 1.5rem;
+        }
+        .card-header {
+            background-color: var(--bs-dark);
+            border-bottom: 2px solid var(--bs-primary);
+            font-weight: 600;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--bs-primary);
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        }
+        .pricing-breakdown {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .auto-calc {
+            background-color: rgba(13, 110, 253, 0.1);
+            border-color: var(--bs-primary);
+        }
+        .input-group-text {
+            background-color: var(--bs-secondary);
+            border-color: var(--bs-border-color);
+        }
+    </style>
+    <script>
+      (function() {
+        var pass = prompt("請輸入密碼以訪問報價系統");
+        if (pass !== "93784793") {
+          // 完全重寫頁面內容
+          document.documentElement.innerHTML = "<!DOCTYPE html><html><head><title>拒絕訪問</title><style>body{font-family:Arial,sans-serif;text-align:center;margin-top:100px;font-size:24px;color:#ff0000;background:#000;}</style></head><body><h1>無權訪問</h1><p>密碼錯誤，拒絕訪問此系統</p></body></html>";
+          // 阻止進一步載入
+          if (window.stop) window.stop();
+          if (document.execCommand) document.execCommand("Stop");
+          throw new Error("Access denied");
+        }
+      })();
+    </script>
+    
+    <!-- 隱藏頁面內容直到密碼驗證完成 -->
+    <style id="hideContent">
+      body { display: none !important; }
+    </style>
+    <script>
+      // 如果密碼正確，顯示頁面
+      document.addEventListener('DOMContentLoaded', function() {
+        var hideStyle = document.getElementById('hideContent');
+        if (hideStyle) hideStyle.remove();
+        document.body.style.display = 'block';
+      });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="text-center py-4 mb-4 border-bottom">
+            <h1 class="display-4"><i class="fas fa-hammer me-3"></i>室內裝修報價系統</h1>
+            <p class="lead text-muted">完整版 - 計算報價並匯出Excel</p>
+        </div>
+
+        <div class="row">
+            <!-- Input Form -->
+            <div class="col-lg-8">
+                <form id="quotationForm">
+                    <!-- 客戶資訊 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-user me-2"></i>客戶資訊</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="client_name" class="form-label">客戶名稱</label>
+                                    <input type="text" class="form-control" id="client_name" placeholder="可空白">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="date" class="form-label">報價日期</label>
+                                    <input type="date" class="form-control" id="date">
+                                </div>
+                                <div class="col-12 mb-3">
+                                    <label for="address" class="form-label">地址</label>
+                                    <input type="text" class="form-control" id="address" placeholder="可空白">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 基準坪數 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-ruler me-2"></i>基準坪數</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="base_ping" class="form-label">基準坪數 (12-40坪) *</label>
+                                    <input type="number" class="form-control" id="base_ping" min="12" max="40" value="20" required onchange="calculatePricing()">
+                                    <div class="form-text">影響所有基礎工程與區間價格計算</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 基礎工程項目 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-tools me-2"></i>基礎工程項目</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="paint" onchange="calculatePricing()" checked>
+                                        <label class="form-check-label fw-bold" for="paint">油漆</label>
+                                        <div><small class="text-muted">基礎價格：80,000元 (12坪)，每坪增額：5,000元</small></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="electrical" onchange="calculatePricing()" checked>
+                                        <label class="form-check-label fw-bold" for="electrical">水電</label>
+                                        <div><small class="text-muted">基礎價格：60,000元 (12坪)，每坪增額：5,000元</small></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="lighting" onchange="calculatePricing()" checked>
+                                        <label class="form-check-label fw-bold" for="lighting">燈具</label>
+                                        <div><small class="text-muted">基礎價格：45,000元 (12坪)，每坪增額：3,000元</small></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="glass" onchange="calculatePricing()" checked>
+                                        <label class="form-check-label fw-bold" for="glass">玻璃</label>
+                                        <div><small class="text-muted">基礎價格：25,000元 (12坪)，每坪增額：3,000元</small></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 木作工程 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-tree me-2"></i>木作工程</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="aircond_woodwork" class="form-label">冷氣+窗簾盒</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="aircond_woodwork" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 1,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="wall_panel" class="form-label">壁板</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="wall_panel" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 4,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="low_screen_simple" class="form-label">矮屏(無造型)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="low_screen_simple" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 2,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="low_screen_curved" class="form-label">矮屏(有弧度)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="low_screen_curved" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 3,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="sliding_door_wood" class="form-label">拉門(含五金)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="sliding_door_wood" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 33,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="room_door" class="form-label">房門(含五金)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="room_door" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 33,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="flat_ceiling" class="form-label">平釘天花板</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="flat_ceiling" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">坪 × 6,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="decorative_ceiling" class="form-label">造型天花板</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="decorative_ceiling" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">坪 × 7,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="partition_simple" class="form-label">隔間(無造型)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="partition_simple" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 4,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="partition_curved" class="form-label">隔間(有弧度)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="partition_curved" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 5,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="wall_ac_slot" class="form-label">壁掛冷氣凹槽</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="wall_ac_slot" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">空間 × 4,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="ceiling_ac_slot" class="form-label">吊隱冷氣凹槽</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="ceiling_ac_slot" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">空間 × 8,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-12 mb-3">
+                                    <label for="woodwork_hardware" class="form-label">木作五金 (自動計算 - 木作總金額 × 5%)</label>
+                                    <input type="text" class="form-control auto-calc" id="woodwork_hardware" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 系統櫃配置 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-cube me-2"></i>系統櫃配置</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                填入所需長度（尺）或數量
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="bed_frame_length" class="form-label">床架 - 長度</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="bed_frame_length" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="bed_frame_width" class="form-label">床架 - 寬度</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="bed_frame_width" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="nightstand" class="form-label">床頭櫃</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="nightstand" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 6,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="wall_cabinet_door" class="form-label">吊櫃(有門片)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="wall_cabinet_door" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 5,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="wall_cabinet_no_door" class="form-label">吊櫃(無門片)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="wall_cabinet_no_door" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 5,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="tall_cabinet_no_drawer" class="form-label">高櫃(含書櫃40-50cm無抽屜)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="tall_cabinet_no_drawer" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 7,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="tall_cabinet_with_drawer" class="form-label">高櫃(含書櫃40-50cm有抽屜)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="tall_cabinet_with_drawer" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 8,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="wardrobe_door_60cm" class="form-label">衣櫃(門片含收納櫃60cm)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="wardrobe_door_60cm" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 8,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="wardrobe_slide_60cm" class="form-label">衣櫃(拉門含收納櫃60cm)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="wardrobe_slide_60cm" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 9,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="appliance_cabinet" class="form-label">電器櫃</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="appliance_cabinet" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 8,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="desk" class="form-label">書桌</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="desk" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 6,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="low_cabinet_no_drawer" class="form-label">矮櫃(無抽屜)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="low_cabinet_no_drawer" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 6,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="low_cabinet_with_drawer" class="form-label">矮櫃(有抽屜)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="low_cabinet_with_drawer" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 7,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="tv_cabinet" class="form-label">電視櫃</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="tv_cabinet" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 4,000</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="system_wall_panel" class="form-label">壁板</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="system_wall_panel" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">尺 × 3,000</span>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 mb-3">
+                                    <label for="system_hardware" class="form-label">系統五金 (自動計算 - 系統總金額 × 5%)</label>
+                                    <input type="text" class="form-control auto-calc" id="system_hardware" readonly>
+                                </div>
+                                <div class="col-12 mb-3">
+                                    <label for="system_shipping" class="form-label">運費 (自動計算 - 系統總金額 × 5%)</label>
+                                    <input type="text" class="form-control auto-calc" id="system_shipping" readonly>
+                                </div>
+                                <div class="col-12 mb-3">
+                                    <label for="system_assembly" class="form-label">組裝費 (自動計算 - 系統總金額 × 20%)</label>
+                                    <input type="text" class="form-control auto-calc" id="system_assembly" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 鐵件拉門 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-door-open me-2"></i>鐵件拉門</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="iron_sliding_door" class="form-label">鐵件拉門(含五金)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="iron_sliding_door" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 28,000</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 開關面板 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-toggle-on me-2"></i>開關面板</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="switch_panel" class="form-label">選擇開關面板</label>
+                                    <select class="form-select" id="switch_panel" onchange="calculatePricing()">
+                                        <option value="starlight" selected>星光 - 基數7000 每坪+600</option>
+                                        <option value="risna">Risna - 基數9000 每坪+700</option>
+                                    </select>
+                                    <small class="text-muted">基數為12坪，每多1坪按對應金額計算</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="switch_panel_calc" class="form-label">開關面板金額 (自動計算)</label>
+                                    <input type="text" class="form-control auto-calc" id="switch_panel_calc" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 大板 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-square me-2"></i>大板</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="large_panel" class="form-label">選擇大板等級</label>
+                                    <select class="form-select" id="large_panel" onchange="calculatePricing()">
+                                        <option value="0">不選擇</option>
+                                        <option value="45000">少 - 45,000元</option>
+                                        <option value="50000">中 - 50,000元</option>
+                                        <option value="60000">多 - 60,000元</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 特殊漆 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-paint-roller me-2"></i>特殊漆</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="special_paint" class="form-label">選擇特殊漆等級</label>
+                                    <select class="form-select" id="special_paint" onchange="calculatePricing()">
+                                        <option value="0">不選擇</option>
+                                        <option value="45000">少 - 45,000元</option>
+                                        <option value="50000">中 - 50,000元</option>
+                                        <option value="60000">多 - 60,000元</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 鐵件 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-tools me-2"></i>鐵件</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="ironwork" class="form-label">選擇鐵件等級</label>
+                                    <select class="form-select" id="ironwork" onchange="calculatePricing()">
+                                        <option value="0">不選擇</option>
+                                        <option value="8000">少 - 8,000元</option>
+                                        <option value="10000">中 - 10,000元</option>
+                                        <option value="12000">多 - 12,000元</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 鋁框吊框 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-window-maximize me-2"></i>鋁框吊框</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="aluminum_40x70" class="form-label">40*70</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="aluminum_40x70" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 2,300</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="aluminum_45x70" class="form-label">45*70</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="aluminum_45x70" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 2,600</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="aluminum_50x70" class="form-label">50*70</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="aluminum_50x70" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 3,000</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 高門框 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-door-closed me-2"></i>高門框</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="tall_frame_40x240" class="form-label">40*240</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="tall_frame_40x240" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 7,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="tall_frame_45x240" class="form-label">45*240</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="tall_frame_45x240" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 8,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="tall_frame_50x240" class="form-label">50*240</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="tall_frame_50x240" min="0" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">樘 × 9,500</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 其他單價項目 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-list me-2"></i>其他單價項目</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="clean_enable" onchange="toggleInput('clean')" checked>
+                                        <label class="form-check-label fw-bold" for="clean_enable">清潔 (全室含衛浴/陽台/廚房)</label>
+                                    </div>
+                                    <div class="input-group" id="clean_input">
+                                        <input type="number" class="form-control" id="clean" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">坪 × 1,200</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="floor_enable" onchange="toggleInput('floor')">
+                                        <label class="form-check-label fw-bold" for="floor_enable">木地板 (不含衛浴/陽台/廚房)</label>
+                                    </div>
+                                    <div class="input-group" id="floor_input" style="display: none;">
+                                        <input type="number" class="form-control" id="floor" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">坪 × 6,500</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="protect_enable" onchange="toggleInput('protect')">
+                                        <label class="form-check-label fw-bold" for="protect_enable">室內保護</label>
+                                    </div>
+                                    <div class="input-group" id="protect_input" style="display: none;">
+                                        <input type="number" class="form-control" id="protect" min="0" step="0.1" value="0" onchange="calculatePricing()">
+                                        <span class="input-group-text">坪 × 1,000</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 其他項目 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-plus me-2"></i>其他項目 (尚未計算的項目)</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-12 mb-3">
+                                    <label for="other_items" class="form-label">其他項目 (自動計算 - 總金額 × 10%)</label>
+                                    <input type="text" class="form-control auto-calc" id="other_items" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Pricing Display -->
+            <div class="col-lg-4">
+                <div class="sticky-top" style="top: 1rem;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-calculator me-2"></i>報價試算</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="pricing-display">
+                                <p class="text-muted text-center">請輸入基準坪數進行計算</p>
+                            </div>
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="button" class="btn btn-primary btn-lg" onclick="calculatePricing()">
+                                    <i class="fas fa-calculator me-2"></i>重新計算
+                                </button>
+                                <button type="button" class="btn btn-success btn-lg" onclick="generateExcel()" id="excelBtn" disabled>
+                                    <i class="fas fa-file-excel me-2"></i>匯出Excel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('date').value = today;
+            calculatePricing();
+        });
+
+        // 切換輸入框顯示
+        function toggleInput(itemId) {
+            const checkbox = document.getElementById(itemId + '_enable');
+            const inputGroup = document.getElementById(itemId + '_input');
+            const input = document.getElementById(itemId);
+            
+            if (checkbox.checked) {
+                inputGroup.style.display = 'flex';
+                input.focus();
+            } else {
+                inputGroup.style.display = 'none';
+                input.value = '0';
+            }
+            calculatePricing();
+        }
+
+        // 計算每坪增額型價格
+        function calcIncremental(basePing, basePingSize, basePrice, perPingAdd) {
+            const diff = Math.max(0, basePing - basePingSize);
+            return basePrice + diff * perPingAdd;
+        }
+
+        // 計算報價
+        function calculatePricing() {
+            const basePing = parseInt(document.getElementById('base_ping').value) || 15;
+            
+            if (basePing < 12 || basePing > 20) {
+                document.getElementById('pricing-display').innerHTML = 
+                    '<p class="text-danger">基準坪數必須在12-20坪之間</p>';
+                return;
+            }
+
+            let items = {};
+            let total = 0;
+
+            // 基礎工程項目
+            const INCREMENT_RULES = {
+                "油漆": [12, 80000, 5000],
+                "水電": [12, 60000, 5000],
+                "燈具": [12, 45000, 3000],
+                "玻璃": [12, 25000, 3000]
+            };
+
+            Object.entries(INCREMENT_RULES).forEach(([name, rule]) => {
+                const checkboxId = name === '油漆' ? 'paint' : 
+                                 name === '水電' ? 'electrical' : 
+                                 name === '燈具' ? 'lighting' : 'glass';
+                const checked = document.getElementById(checkboxId).checked;
+                
+                if (checked) {
+                    items[name] = calcIncremental(basePing, ...rule);
+                }
+            });
+
+            // 木作工程
+            let woodworkTotal = 0;
+            const woodworkItems = [
+                ['aircond_woodwork', 1500, '冷氣+窗簾盒'],
+                ['wall_panel', 4500, '壁板'],
+                ['low_screen_simple', 2500, '矮屏(無造型)'],
+                ['low_screen_curved', 3000, '矮屏(有弧度)'],
+                ['sliding_door_wood', 33000, '拉門(含五金)'],
+                ['room_door', 33000, '房門(含五金)'],
+                ['flat_ceiling', 6500, '平釘天花板'],
+                ['decorative_ceiling', 7000, '造型天花板'],
+                ['partition_simple', 4000, '隔間(無造型)'],
+                ['partition_curved', 5000, '隔間(有弧度)'],
+                ['wall_ac_slot', 4500, '壁掛冷氣凹槽'],
+                ['ceiling_ac_slot', 8500, '吊隱冷氣凹槽']
+            ];
+
+            woodworkItems.forEach(([id, price, name]) => {
+                const quantity = parseFloat(document.getElementById(id).value) || 0;
+                const amount = quantity * price;
+                if (amount > 0) {
+                    items[name] = amount;
+                    woodworkTotal += amount;
+                }
+            });
+
+            // 木作五金 (木作總金額 × 5%)
+            if (woodworkTotal > 0) {
+                const woodworkHardware = Math.round(woodworkTotal * 0.05);
+                items['木作五金'] = woodworkHardware;
+                document.getElementById('woodwork_hardware').value = formatNumber(woodworkHardware);
+            } else {
+                document.getElementById('woodwork_hardware').value = '0';
+            }
+
+            // 系統櫃配置
+            let systemTotal = 0;
+            
+            // 床架特殊計算 (長 × 寬 = 金額)
+            const bedLength = parseFloat(document.getElementById('bed_frame_length').value) || 0;
+            const bedWidth = parseFloat(document.getElementById('bed_frame_width').value) || 0;
+            if (bedLength > 0 && bedWidth > 0) {
+                const bedFrameAmount = bedLength * bedWidth;
+                items['床架'] = bedFrameAmount;
+                systemTotal += bedFrameAmount;
+            }
+
+            const systemItems = [
+                ['nightstand', 6000, '床頭櫃'],
+                ['wall_cabinet_door', 5500, '吊櫃(有門片)'],
+                ['wall_cabinet_no_door', 5000, '吊櫃(無門片)'],
+                ['tall_cabinet_no_drawer', 7500, '高櫃(含書櫃40-50cm無抽屜)'],
+                ['tall_cabinet_with_drawer', 8000, '高櫃(含書櫃40-50cm有抽屜)'],
+                ['wardrobe_door_60cm', 8500, '衣櫃(門片含收納櫃60cm)'],
+                ['wardrobe_slide_60cm', 9000, '衣櫃(拉門含收納櫃60cm)'],
+                ['appliance_cabinet', 8000, '電器櫃'],
+                ['desk', 6000, '書桌'],
+                ['low_cabinet_no_drawer', 6000, '矮櫃(無抽屜)'],
+                ['low_cabinet_with_drawer', 7000, '矮櫃(有抽屜)'],
+                ['tv_cabinet', 4000, '電視櫃'],
+                ['system_wall_panel', 3000, '壁板']
+            ];
+
+            systemItems.forEach(([id, price, name]) => {
+                const quantity = parseFloat(document.getElementById(id).value) || 0;
+                const amount = quantity * price;
+                if (amount > 0) {
+                    items[name] = amount;
+                    systemTotal += amount;
+                }
+            });
+
+            // 系統五金、運費、組裝費
+            if (systemTotal > 0) {
+                const systemHardware = Math.round(systemTotal * 0.05);
+                const systemShipping = Math.round(systemTotal * 0.05);
+                const systemAssembly = Math.round(systemTotal * 0.20);
+                
+                items['系統五金'] = systemHardware;
+                items['運費'] = systemShipping;
+                items['組裝費'] = systemAssembly;
+                
+                document.getElementById('system_hardware').value = formatNumber(systemHardware);
+                document.getElementById('system_shipping').value = formatNumber(systemShipping);
+                document.getElementById('system_assembly').value = formatNumber(systemAssembly);
+            } else {
+                document.getElementById('system_hardware').value = '0';
+                document.getElementById('system_shipping').value = '0';
+                document.getElementById('system_assembly').value = '0';
+            }
+
+            // 鐵件拉門
+            const ironSlidingDoor = parseFloat(document.getElementById('iron_sliding_door').value) || 0;
+            if (ironSlidingDoor > 0) {
+                items['鐵件拉門(含五金)'] = ironSlidingDoor * 28000;
+            }
+
+            // 開關面板計算
+            const switchPanel = document.getElementById('switch_panel').value;
+            let switchAmount = 0;
+            if (switchPanel === 'starlight') {
+                // 星光: 基數7000 (12坪) 每多1坪+600
+                switchAmount = 7000 + Math.max(0, basePing - 12) * 600;
+            } else if (switchPanel === 'risna') {
+                // Risna: 基數9000 (12坪) 每多1坪+700
+                switchAmount = 9000 + Math.max(0, basePing - 12) * 700;
+            }
+            items['開關面板'] = switchAmount;
+            document.getElementById('switch_panel_calc').value = formatNumber(switchAmount);
+
+            // 大板
+            const largePanelValue = parseInt(document.getElementById('large_panel').value) || 0;
+            if (largePanelValue > 0) {
+                items['大板'] = largePanelValue;
+            }
+
+            // 特殊漆
+            const specialPaintValue = parseInt(document.getElementById('special_paint').value) || 0;
+            if (specialPaintValue > 0) {
+                items['特殊漆'] = specialPaintValue;
+            }
+
+            // 鐵件
+            const ironworkValue = parseInt(document.getElementById('ironwork').value) || 0;
+            if (ironworkValue > 0) {
+                items['鐵件'] = ironworkValue;
+            }
+
+            // 鋁框吊框
+            const aluminumItems = [
+                ['aluminum_40x70', 2300, '鋁框吊框 40*70'],
+                ['aluminum_45x70', 2600, '鋁框吊框 45*70'],
+                ['aluminum_50x70', 3000, '鋁框吊框 50*70']
+            ];
+
+            aluminumItems.forEach(([id, price, name]) => {
+                const quantity = parseFloat(document.getElementById(id).value) || 0;
+                if (quantity > 0) {
+                    items[name] = quantity * price;
+                }
+            });
+
+            // 高門框
+            const tallFrameItems = [
+                ['tall_frame_40x240', 7500, '高門框 40*240'],
+                ['tall_frame_45x240', 8500, '高門框 45*240'],
+                ['tall_frame_50x240', 9500, '高門框 50*240']
+            ];
+
+            tallFrameItems.forEach(([id, price, name]) => {
+                const quantity = parseFloat(document.getElementById(id).value) || 0;
+                if (quantity > 0) {
+                    items[name] = quantity * price;
+                }
+            });
+
+            // 其他單價項目
+            const otherUnitItems = [
+                ['clean', 1200, '清潔', 'clean_enable'],
+                ['floor', 6500, '木地板', 'floor_enable'],
+                ['protect', 1000, '室內保護', 'protect_enable']
+            ];
+
+            otherUnitItems.forEach(([id, price, name, enableId]) => {
+                const enabled = document.getElementById(enableId).checked;
+                if (enabled) {
+                    const quantity = parseFloat(document.getElementById(id).value) || 0;
+                    if (quantity > 0) {
+                        items[name] = quantity * price;
+                    }
+                }
+            });
+
+            // 計算小計
+            const subtotal = Object.values(items).reduce((sum, value) => sum + value, 0);
+            
+            // 監工費 8%
+            const supervisionFee = Math.round(subtotal * 0.08);
+            items['監工費(8%)'] = supervisionFee;
+
+            // 稅額 5%
+            const tax = Math.round(subtotal * 0.05);
+            items['稅額(5%)'] = tax;
+
+            // 其他項目 10%
+            const otherItemsAmount = Math.round(subtotal * 0.10);
+            items['其他項目(尚未計算的項目)'] = otherItemsAmount;
+            document.getElementById('other_items').value = formatNumber(otherItemsAmount);
+
+            // 總計
+            const grandTotal = subtotal + supervisionFee + tax + otherItemsAmount;
+
+            // 顯示結果
+            let html = '<div class="pricing-breakdown">';
+            Object.entries(items).forEach(([name, amount]) => {
+                if (amount > 0) {
+                    html += `<div class="d-flex justify-content-between">
+                        <span>${name}</span>
+                        <span class="fw-bold">${formatNumber(amount)}</span>
+                    </div>`;
+                }
+            });
+            html += `<hr>
+                <div class="d-flex justify-content-between fs-5 text-primary">
+                    <span><strong>總金額</strong></span>
+                    <span><strong>${formatNumber(grandTotal)}</strong></span>
+                </div>
+            </div>`;
+
+            document.getElementById('pricing-display').innerHTML = html;
+            document.getElementById('excelBtn').disabled = false;
+
+            // 儲存計算結果供Excel使用
+            window.currentPricing = {
+                items: items,
+                subtotal: subtotal,
+                supervisionFee: supervisionFee,
+                tax: tax,
+                otherItems: otherItemsAmount,
+                total: grandTotal
+            };
+        }
+
+        // 格式化數字
+        function formatNumber(num) {
+            return new Intl.NumberFormat('zh-TW').format(Math.round(num));
+        }
+
+        // 生成Excel
+        function generateExcel() {
+            if (!window.currentPricing) {
+                alert('請先計算報價');
+                return;
+            }
+
+            const clientName = document.getElementById('client_name').value || '客戶';
+            const address = document.getElementById('address').value || '';
+            const date = document.getElementById('date').value;
+
+            // 準備資料
+            const data = [];
+            
+            // 客戶資訊
+            data.push(['客戶名稱', clientName]);
+            data.push(['地址', address]);
+            data.push(['日期', date]);
+            data.push([]); // 空行
+
+            // 項目明細
+            data.push(['項目', '金額']);
+            Object.entries(window.currentPricing.items).forEach(([name, amount]) => {
+                if (amount > 0) {
+                    data.push([name, amount]);
+                }
+            });
+
+            // 總計資訊
+            data.push([]);
+            data.push(['總金額', window.currentPricing.total]);
+
+            // 建立工作簿
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            
+            // 設置欄寬
+            ws['!cols'] = [
+                { wch: 30 }, // 項目欄寬度
+                { wch: 15 }  // 金額欄寬度
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, "報價單");
+            
+            // 匯出檔案
+            const filename = `室內裝修報價單_${clientName}_${date || new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, filename);
+        }
+    </script>
+</body>
+</html>
