@@ -653,7 +653,7 @@
                                     <label for="protection" class="form-label">室內保護</label>
                                     <div class="input-group">
                                         <input type="number" class="form-control" id="protection" min="0" step="0.1" value="0" onchange="calculatePricing()">
-                                        <span class="input-group-text">坪 × 1,500</span>
+                                        <span class="input-group-text">坪 × 1,000</span>
                                     </div>
                                 </div>
                             </div>
@@ -1035,15 +1035,7 @@
                 total += woodworkHardware;
             }
 
-            const systemTotal = (() => {
-                let sum = 0;
-                ['nightstand','wall_cabinet_door','wall_cabinet_no_door','tall_cabinet_no_drawer','tall_cabinet_with_drawer','wardrobe_door_60cm','wardrobe_slide_60cm','appliance_cabinet','desk','low_cabinet_no_drawer','low_cabinet_with_drawer','tv_cabinet','system_wall_panel'].forEach(id=>{
-                    const map = {nightstand:6000,wall_cabinet_door:5500,wall_cabinet_no_door:5000,tall_cabinet_no_drawer:7500,tall_cabinet_with_drawer:8000,wardrobe_door_60cm:8500,wardrobe_slide_60cm:9000,appliance_cabinet:8000,desk:6000,low_cabinet_no_drawer:6000,low_cabinet_with_drawer:7000,tv_cabinet:4000,system_wall_panel:3000};
-                    const v = parseFloat(document.getElementById(id).value) || 0;
-                    sum += v * map[id];
-                });
-                return sum;
-            })();
+
 
             const systemHardware = systemTotal * 0.05;
             const systemShipping = systemTotal * 0.05;
@@ -1277,6 +1269,10 @@
             XLSX.utils.book_append_sheet(wb, ws, "報價單");
             XLSX.writeFile(wb, "室內裝修報價單.xlsx");
         }
+
+        // 讓 HTML 上的 onclick / onchange 能找到這兩個函式
+        window.calculatePricing = calculatePricing;
+        window.exportToExcel = exportToExcel;
 
     </script>
 </body>
