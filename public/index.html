@@ -806,13 +806,13 @@
     // 重置狀態
     PRICING_STATE = { items: [], total: 0 };
 
-const addLine = (category, name, qty, description, rawPrice) => {
-  const amt = R(rawPrice);
-  if (amt <= 0) return 0;
-  PRICING_STATE.items.push({ category, name, qty, description, amount: amt }); // ← 用 description
-  PRICING_STATE.total += amt;
-  return amt;
-};
+    const addLine = (category, name, qty, description, rawPrice) => {
+      const amt = R(rawPrice);
+      if (amt <= 0) return 0;
+      PRICING_STATE.items.push({ category, name, qty, description, amount: amt }); // 前端保留 description（僅用於畫面/Excel）
+      PRICING_STATE.total += amt;
+      return amt;
+    };
 
     if (basePing < 12) {
       totalEl.textContent = money(0);
@@ -1094,18 +1094,17 @@ const addLine = (category, name, qty, description, rawPrice) => {
       const tax5       = _toInt(_parseMoney(document.getElementById('tax').value));
       const grand      = _toInt(_parseMoney(document.getElementById('total-price').textContent));
 
-      // 明細正規化（型別安全）
-      const items = (PRICING_STATE.items || []).map(it => ({
+      // ✅ 只送後端有的欄位（不要送 description/desc）
+      const sanitizedItems = (PRICING_STATE.items || []).map(it => ({
         category: String(it.category || ''),
         name:     String(it.name || ''),
         qty:      Number(it.qty || 0),
-        description: String(it.description || ''), 
         amount:   _toInt(it.amount || 0)
       }));
 
-      // payload 保持原本結構，僅把數字轉成後端最好處理的格式
+      // payload
       const quote = {
-        quote_date: raw['date'] || null,                 // 保留 YYYY-MM-DD
+        quote_date: raw['date'] || null, // YYYY-MM-DD
         client_name: raw['client_name'] || null,
         address: raw['address'] || null,
         style: style || null,
@@ -1118,7 +1117,7 @@ const addLine = (category, name, qty, description, rawPrice) => {
         grand_total: grand,
         form: raw
       };
-      const payload = { quote, items };
+      const payload = { quote, items: sanitizedItems };
 
       const resp = await fetch(API_URL, {
         method: 'POST',
@@ -1130,7 +1129,6 @@ const addLine = (category, name, qty, description, rawPrice) => {
         body: JSON.stringify(payload)
       });
 
-      // 無論成功或 400，都先拿純文字，再嘗試 JSON
       const rawText = await resp.text();
       let data;
       try { data = rawText ? JSON.parse(rawText) : {}; } catch { data = { message: rawText }; }
