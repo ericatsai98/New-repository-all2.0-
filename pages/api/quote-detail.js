@@ -1,29 +1,22 @@
-// /api/quote-detail.js
+// pages/api/quote-detail.js
 export default async function handler(req, res) {
-  if (req.method !== 'GET' && req.method !== 'OPTIONS') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SRV_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SRV_KEY) {
-    return res.status(500).json({ error: 'Missing SUPABASE envs' });
-  }
-
   try {
-    const base = `http://${req.headers.host || 'localhost'}`;
-    const url = new URL(req.url, base);
-    const id = (url.searchParams.get('id') || '').trim();
+    if (req.method !== 'GET' && req.method !== 'OPTIONS') {
+      return res.status(405).json({ error: 'Method Not Allowed' });
+    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
+
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SRV_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SRV_KEY) {
+      return res.status(500).json({ error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY' });
+    }
+
+    const { id } = req.query;
     if (!id) return res.status(400).json({ error: 'Missing id' });
 
-    // 取單筆；同時把 quote_items(*) 關聯帶出來
     const qs = new URLSearchParams();
-    qs.set(
-      'select',
+    qs.set('select',
       [
         'id,created_at,quote_date,client_name,address,style,room_type,base_ping,',
         'subtotal,other_items,supervision_fee,tax,grand_total,',
@@ -42,14 +35,14 @@ export default async function handler(req, res) {
         Prefer: 'count=exact'
       }
     });
-    const data = await resp.json();
+
+    const data = await resp.json().catch(() => ({}));
     if (!resp.ok) return res.status(resp.status).json(data);
 
     const row = Array.isArray(data) ? data[0] : null;
     if (!row) return res.status(404).json({ error: 'Not found' });
-
     return res.status(200).json(row);
   } catch (e) {
-    return res.status(500).json({ error: e.message || String(e) });
+    return res.status(500).json({ error: e?.message || String(e) });
   }
 }
