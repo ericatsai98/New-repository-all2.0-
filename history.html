@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>歷史報價查詢</title>
+  <meta name="robots" content="noindex,nofollow"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/darkly/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <!-- 匯出 Excel 用 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    .card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,.075); }
+    .table td, .table th { vertical-align: middle; }
+    .sticky-top-20 { position: sticky; top: 20px; z-index: 1020; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="mb-0"><i class="fa-solid fa-magnifying-glass me-2"></i>歷史報價查詢</h2>
+    <div>
+      <a href="./index.html" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-arrow-left me-1"></i>返回報價</a>
+    </div>
+  </div>
+
+  <!-- 篩選條件 -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form id="filterForm" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">風格</label>
+          <select id="style" class="form-select">
+            <option value="">全部</option>
+            <option>簡約</option><option>北歐</option><option>清奢</option>
+            <option>古典</option><option>美式</option><option>現代</option>
+            <option>日式</option><option>無印</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">房型</label>
+          <select id="room_type" class="form-select">
+            <option value="">全部</option>
+            <option>一房一廳一衛</option>
+            <option>兩房一廳一衛</option>
+            <option>兩房兩廳兩衛</option>
+            <option>三房一廳一衛</option>
+            <option>三房兩廳兩衛</option>
+            <option>三房兩廳三衛</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">坪數（最小）</label>
+          <input id="ping_min" type="number" class="form-control" min="0" step="0.1" placeholder="例如 18"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">坪數（最大）</label>
+          <input id="ping_max" type="number" class="form-control" min="0" step="0.1" placeholder="例如 28"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">日期（起）</label>
+          <input id="from" type="date" class="form-control"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">日期（迄）</label>
+          <input id="to" type="date" class="form-control"/>
+        </div>
+        <div class="col-md-6 d-flex align-items-end justify-content-end">
+          <div class="btn-group">
+            <button type="button" class="btn btn-primary" id="btnSearch"><i class="fa-solid fa-search me-1"></i>查詢</button>
+            <button type="button" class="btn btn-secondary" id="btnReset"><i class="fa-solid fa-rotate-left me-1"></i>重設</button>
+            <button type="button" class="btn btn-success" id="btnExport"><i class="fa-solid fa-file-excel me-1"></i>匯出 Excel</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 統計 / 分頁 -->
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div id="summary" class="text-muted">共 0 筆</div>
+    <div class="btn-group">
+      <button id="prev" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-angle-left"></i></button>
+      <button id="next" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-angle-right"></i></button>
+    </div>
+  </div>
+
+  <!-- 結果表 -->
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>日期</th>
+            <th>客戶</th>
+            <th>風格</th>
+            <th>房型</th>
+            <th class="text-end">坪數</th>
+            <th class="text-end">總價</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="7" class="text-center text-muted py-4">尚無資料</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 詳情 Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">報價詳情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
+      </div>
+      <div class="modal-body">
+        <pre id="detailPre" class="mb-0" style="white-space:pre-wrap;"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const state = { page: 1, limit: 20, lastResp: null, lastQuery: {} };
+
+  function nt(n){ return (n ?? 0).toLocaleString('zh-TW', {maximumFractionDigits: 0}); }
+  function fmtMoney(n){ return 'NT$ ' + nt(Math.round(Number(n)||0)); }
+  function fmtDate(s){ if(!s) return ''; return String(s).slice(0,10); }
+
+  function collectQuery(){
+    const q = {
+      style: document.getElementById('style').value.trim(),
+      room_type: document.getElementById('room_type').value.trim(),
+      ping_min: document.getElementById('ping_min').value.trim(),
+      ping_max: document.getElementById('ping_max').value.trim(),
+      from: document.getElementById('from').value.trim(),
+      to: document.getElementById('to').value.trim(),
+      page: state.page,
+      limit: state.limit
+    };
+    // 清掉空字串
+    Object.keys(q).forEach(k => { if(q[k] === '') delete q[k]; });
+    return q;
+  }
+
+  async function search(page=1){
+    state.page = page;
+    const q = state.lastQuery = collectQuery();
+    const sp = new URLSearchParams(q);
+    const resp = await fetch('/api/search-quotes?' + sp.toString());
+    const data = await resp.json();
+    state.lastResp = data;
+    render(data);
+  }
+
+  function render(resp){
+    const tbody = document.getElementById('tbody');
+    if(!resp || !Array.isArray(resp.items) || resp.items.length === 0){
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">沒有符合條件的資料</td></tr>';
+      document.getElementById('summary').textContent = '共 0 筆';
+      return;
+    }
+    const rows = resp.items.map(r => `
+      <tr>
+        <td>${fmtDate(r.quote_date || r.created_at)}</td>
+        <td>${r.client_name ?? ''}</td>
+        <td>${r.style ?? ''}</td>
+        <td>${r.room_type ?? ''}</td>
+        <td class="text-end">${r.base_ping ?? ''}</td>
+        <td class="text-end">${fmtMoney(r.grand_total)}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-info" data-id="${r.id}" onclick="showDetail('${r.id}')">
+            <i class="fa-solid fa-eye me-1"></i>查看
+          </button>
+        </td>
+      </tr>
+    `).join('');
+    tbody.innerHTML = rows;
+
+    const totalTxt = (resp.total != null)
+      ? `共 ${resp.total.toLocaleString()} 筆，頁 ${resp.page}`
+      : `頁 ${resp.page}`;
+    document.getElementById('summary').textContent = totalTxt;
+
+    document.getElementById('prev').disabled = (resp.page <= 1);
+    document.getElementById('next').disabled = (resp.hasNext === false);
+  }
+
+  async function showDetail(id){
+    // 取這一筆的完整資料（包含 form JSON），再次查詢一次單筆
+    const sp = new URLSearchParams({ id: `eq.${id}`, select: '*' });
+    const resp = await fetch('/api/search-quotes?' + sp.toString()); // 後端會忽略未知參數；我們另外做簡單單筆查
+    // 簡化：直接從 lastResp 找
+    const r = (state.lastResp?.items || []).find(x => x.id === id);
+    let text = '';
+    if (r) {
+      text += `日期：${fmtDate(r.quote_date || r.created_at)}\n`;
+      text += `客戶：${r.client_name ?? ''}\n`;
+      text += `風格：${r.style ?? ''}\n房型：${r.room_type ?? ''}\n坪數：${r.base_ping ?? ''}\n`;
+      text += `總價：${fmtMoney(r.grand_total)}\n\n`;
+      // form 目前不在搜尋結果內，如要顯示可改 API select 回傳 form；先顯示基本欄位
+      text += '（如需顯示完整表單內容，我可以幫你把 API 加上 form 欄位）';
+    } else {
+      text = '找不到資料';
+    }
+    document.getElementById('detailPre').textContent = text;
+    new bootstrap.Modal(document.getElementById('detailModal')).show();
+  }
+
+  // 匯出目前頁面結果為 Excel
+  function exportExcel(){
+    const items = state?.lastResp?.items || [];
+    if(items.length === 0){ alert('沒有可匯出的資料'); return; }
+
+    const rows = [
+      ['日期','客戶','風格','房型','坪數','總價','ID']
+    ];
+    items.forEach(r=>{
+      rows.push([
+        fmtDate(r.quote_date || r.created_at),
+        r.client_name || '',
+        r.style || '',
+        r.room_type || '',
+        r.base_ping ?? '',
+        Math.round(Number(r.grand_total)||0),
+        r.id
+      ]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, '歷史報價');
+    const ts = new Date().toISOString().replace(/[-:T]/g,'').slice(0,12);
+    XLSX.writeFile(wb, `歷史報價_${ts}.xlsx`);
+  }
+
+  // 事件
+  document.getElementById('btnSearch').addEventListener('click', ()=>search(1));
+  document.getElementById('btnReset').addEventListener('click', ()=>{
+    document.getElementById('filterForm').reset();
+    state.page = 1;
+    search(1);
+  });
+  document.getElementById('btnExport').addEventListener('click', exportExcel);
+  document.getElementById('prev').addEventListener('click', ()=> search(Math.max(1, state.page-1)));
+  document.getElementById('next').addEventListener('click', ()=> search(state.page+1));
+
+  // 預設載入
+  search(1);
+</script>
+</body>
+</html>
