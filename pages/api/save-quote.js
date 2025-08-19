@@ -1,4 +1,8 @@
-// /api/save-quote.js
+// pages/api/save-quote.js
+export const config = {
+  api: { bodyParser: { sizeLimit: '1mb' } } // 用 Next 內建 body parser
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -11,17 +15,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 讀取 JSON body（相容各情況）
-    const body = await new Promise((resolve, reject) => {
-      let buf = '';
-      req.on('data', (c) => (buf += c));
-      req.on('end', () => {
-        try { resolve(buf ? JSON.parse(buf) : {}); } catch (e) { reject(e); }
-      });
-      req.on('error', reject);
-    });
-
-    const { quote, items = [] } = body;
+    // ✅ 直接用 Next 幫你解析好的 req.body
+    const { quote, items = [] } = req.body || {};
     if (!quote || typeof quote !== 'object') {
       return res.status(400).json({ error: 'Invalid payload: quote required' });
     }
