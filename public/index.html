@@ -792,7 +792,14 @@
 
     function calculatePricing() {
       const basePing = parseFloat(document.getElementById('base_ping').value) || 0;
-      if (basePing < 12) return;
+if (basePing < 12) {
+  const totalEl = document.getElementById('total-price');
+  const boxEl   = document.getElementById('pricing-breakdown');
+  if (totalEl) totalEl.textContent = 'NT$ 0';
+  if (boxEl)   boxEl.innerHTML = '<p class="text-muted text-center">請先輸入基準坪數（至少 12 坪）</p>';
+  return;
+}
+
 
       let breakdown = [];
       let total = 0;
@@ -1283,20 +1290,20 @@ function _collectRawForm(){
 }
 
 async function saveQuote(){
+  const btn = document.querySelector('button[onclick="saveQuote()"]');
   try{
-    // 確保金額是最新
-    calculatePricing();
+    if (btn) { btn.disabled = true; btn.textContent = '儲存中…'; }
 
-    // 主要欄位
-    const style = getStyleValue();        // 你原本已實作
-    const room  = getRoomTypeValue();     // 你原本已實作
+    // 你的原本內容從這裡開始
+    calculatePricing();
+    const style = getStyleValue();
+    const room  = getRoomTypeValue();
     const raw   = _collectRawForm();
 
-    // 直接從畫面抓三個自動欄位與總價（你的程式已經計算好）
-    const other10 = _parseMoney(document.getElementById('other_items').value);
-    const supervise8 = _parseMoney(document.getElementById('supervision_fee').value);
-    const tax5 = _parseMoney(document.getElementById('tax').value);
-    const grand = _parseMoney(document.getElementById('total-price').textContent);
+    const other10   = _parseMoney(document.getElementById('other_items').value);
+    const supervise8= _parseMoney(document.getElementById('supervision_fee').value);
+    const tax5      = _parseMoney(document.getElementById('tax').value);
+    const grand     = _parseMoney(document.getElementById('total-price').textContent);
 
     const quote = {
       quote_date: raw['date'] || null,
@@ -1305,15 +1312,13 @@ async function saveQuote(){
       style: style || null,
       room_type: room || null,
       base_ping: parseFloat(raw['base_ping']) || null,
-      subtotal: Math.max(0, grand - other10 - supervise8 - tax5),  // 近似：扣掉三個加成
+      subtotal: Math.max(0, grand - other10 - supervise8 - tax5),
       other_items: other10,
       supervision_fee: supervise8,
       tax: tax5,
       grand_total: grand,
       form: raw
     };
-
-    // 先不送明細；之後要再加 quote_items 我們再擴充
     const payload = { quote, items: [] };
 
     const resp = await fetch('/api/save-quote', {
@@ -1322,15 +1327,27 @@ async function saveQuote(){
       body: JSON.stringify(payload)
     });
     const data = await resp.json();
-    if(!resp.ok){
-      throw new Error(data?.error || '儲存失敗');
-    }
+    if(!resp.ok) throw new Error(data?.error || '儲存失敗');
+
     alert('已儲存成功！編號：' + data.id);
   }catch(err){
     console.error(err);
     alert('儲存失敗：' + (err.message || err));
+  }finally{
+    if (btn) { btn.disabled = false; btn.textContent = '儲存到資料庫'; }
   }
 }
 </script>
+<script>
+// 讓 HTML 裡的 onclick 找得到它們（避免「按了沒反應」）
+window.calculatePricing = calculatePricing;
+window.exportToExcel   = exportToExcel;
+window.saveQuote       = saveQuote;
+window.addBedFrame     = addBedFrame;
+window.removeBedFrame  = removeBedFrame;
+window.getStyleValue   = getStyleValue;
+window.getRoomTypeValue= getRoomTypeValue;
+</script>
+
 </body>
 </html>
