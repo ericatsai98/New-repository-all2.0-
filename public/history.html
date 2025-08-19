@@ -1,19 +1,41 @@
 <script>
   // --- 狀態與小工具 ---
   const state = { page: 1, limit: 20, lastResp: null, lastQuery: {} };
-  function nt(n){ return (n ?? 0).toLocaleString('zh-TW', {maximumFractionDigits: 0}); }
+  const $ = (s) => document.querySelector(s);
+
+  function nt(n){ return (n ?? 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 }); }
   function fmtMoney(n){ return 'NT$ ' + nt(Math.round(Number(n)||0)); }
   function fmtDate(s){ return s ? String(s).slice(0,10) : ''; }
+
+  // 👉 統一打 API：若遇到 401（Basic Auth），自動再重試一次
+  async function apiGetJson(url, init = {}) {
+    let resp = await fetch(url, { cache: 'no-store', ...init });
+    if (resp.status === 401) {
+      // 有些瀏覽器需要在該路徑先被 challenge 一次才會帶 Authorization
+      resp = await fetch(url, { cache: 'no-store', ...init });
+    }
+    const text = await resp.text();
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} ${text || ''}`);
+    try { return JSON.parse(text); } catch { return text; }
+  }
+
+  // UI：顯示讀取中
+  function setLoading(msg = '讀取中…') {
+    $('#tbody').innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">${msg}</td></tr>`;
+    $('#summary').textContent = '';
+    $('#prev').disabled = true;
+    $('#next').disabled = true;
+  }
 
   // 收集查詢條件
   function collectQuery(){
     const q = {
-      style: document.getElementById('style').value.trim(),
-      room_type: document.getElementById('room_type').value.trim(),
-      ping_min: document.getElementById('ping_min').value.trim(),
-      ping_max: document.getElementById('ping_max').value.trim(),
-      from: document.getElementById('from').value.trim(),
-      to: document.getElementById('to').value.trim(),
+      style: $('#style').value.trim(),
+      room_type: $('#room_type').value.trim(),
+      ping_min: $('#ping_min').value.trim(),
+      ping_max: $('#ping_max').value.trim(),
+      from: $('#from').value.trim(),
+      to: $('#to').value.trim(),
       page: state.page,
       limit: state.limit
     };
@@ -22,34 +44,31 @@
   }
 
   // 打 API 搜尋
-  async function search(page=1){
+  async function search(page = 1){
     state.page = page;
-    const q = state.lastQuery = collectQuery();
-    const sp = new URLSearchParams(q);
-    let data = null;
-
+    setLoading();
     try{
-      const resp = await fetch('/api/search-quotes?' + sp.toString());
-      data = await resp.json();
-      if(!resp.ok) throw new Error(data?.error || ('HTTP ' + resp.status));
+      const q = state.lastQuery = collectQuery();
+      const sp = new URLSearchParams(q);
+      const data = await apiGetJson('/api/search-quotes?' + sp.toString());
       state.lastResp = data;
       render(data);
     }catch(err){
       console.error(err);
-      document.getElementById('tbody').innerHTML =
-        `<tr><td colspan="7" class="text-center text-danger py-4">查詢失敗：${(data && data.error) || err.message || err}</td></tr>`;
-      document.getElementById('summary').textContent = '共 0 筆';
+      $('#tbody').innerHTML =
+        `<tr><td colspan="7" class="text-center text-danger py-4">查詢失敗：${err.message || err}</td></tr>`;
+      $('#summary').textContent = '共 0 筆';
     }
   }
 
   // 渲染表格
   function render(resp){
-    const tbody = document.getElementById('tbody');
+    const tbody = $('#tbody');
     if(!resp || !Array.isArray(resp.items) || resp.items.length === 0){
       tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">沒有符合條件的資料</td></tr>';
-      document.getElementById('summary').textContent = '共 0 筆';
-      document.getElementById('prev').disabled = true;
-      document.getElementById('next').disabled = true;
+      $('#summary').textContent = '共 0 筆';
+      $('#prev').disabled = true;
+      $('#next').disabled = true;
       return;
     }
 
@@ -72,10 +91,10 @@
     const totalTxt = (resp.total != null)
       ? `共 ${resp.total.toLocaleString()} 筆，頁 ${resp.page}`
       : `頁 ${resp.page}`;
-    document.getElementById('summary').textContent = totalTxt;
+    $('#summary').textContent = totalTxt;
 
-    document.getElementById('prev').disabled = (resp.page <= 1);
-    document.getElementById('next').disabled = (resp.hasNext === false);
+    $('#prev').disabled = (resp.page <= 1);
+    $('#next').disabled = (resp.hasNext === false);
   }
 
   // 匯出目前頁面結果為 Excel
@@ -104,9 +123,7 @@
   // 單筆詳情（含 quote_items 與 form）
   async function showDetail(id){
     try{
-      const resp = await fetch('/api/quote-detail?id=' + encodeURIComponent(id));
-      const row = await resp.json();
-      if(!resp.ok) throw new Error(row?.error || '取得詳情失敗');
+      const row = await apiGetJson('/api/quote-detail?id=' + encodeURIComponent(id));
 
       // 基本資料
       const base = [
@@ -123,7 +140,7 @@
         { label:'總價', value: fmtMoney(row.grand_total) },
         { label:'編號', value: row.id }
       ];
-      document.getElementById('detailBase').innerHTML = base.map(b => `
+      $('#detailBase').innerHTML = base.map(b => `
         <div class="col-md-4">
           <div class="p-2 border rounded">
             <div class="text-muted small">${b.label}</div>
@@ -134,12 +151,12 @@
       // 明細
       const items = Array.isArray(row.quote_items) ? row.quote_items : [];
       if(items.length === 0){
-        document.getElementById('detailItemsBody').innerHTML =
+        $('#detailItemsBody').innerHTML =
           '<tr><td colspan="6" class="text-muted text-center">無明細</td></tr>';
-        document.getElementById('itemsSubtotal').textContent = 'NT$ 0';
+        $('#itemsSubtotal').textContent = 'NT$ 0';
       }else{
         let sub = 0;
-        document.getElementById('detailItemsBody').innerHTML = items.map(it=>{
+        $('#detailItemsBody').innerHTML = items.map(it=>{
           sub += Number(it.amount)||0;
           return `
             <tr>
@@ -151,14 +168,13 @@
               <td class="text-end">${fmtMoney(it.amount)}</td>
             </tr>`;
         }).join('');
-        document.getElementById('itemsSubtotal').textContent = fmtMoney(sub);
+        $('#itemsSubtotal').textContent = fmtMoney(sub);
       }
 
       // 原始表單 JSON
-      document.getElementById('detailForm').textContent =
-        JSON.stringify(row.form || {}, null, 2);
+      $('#detailForm').textContent = JSON.stringify(row.form || {}, null, 2);
 
-      new bootstrap.Modal(document.getElementById('detailModal')).show();
+      new bootstrap.Modal($('#detailModal')).show();
     }catch(err){
       console.error(err);
       alert(err.message || err);
@@ -166,16 +182,16 @@
   }
 
   // 事件與初始化
-  document.getElementById('btnSearch').addEventListener('click', ()=>search(1));
-  document.getElementById('btnReset').addEventListener('click', ()=>{
-    document.getElementById('filterForm').reset();
+  $('#btnSearch').addEventListener('click', ()=>search(1));
+  $('#btnReset').addEventListener('click', ()=>{
+    $('#filterForm').reset();
     state.page = 1;
     search(1);
   });
-  document.getElementById('btnExport').addEventListener('click', exportExcel);
-  document.getElementById('prev').addEventListener('click', ()=> search(Math.max(1, state.page-1)));
-  document.getElementById('next').addEventListener('click', ()=> search(state.page+1));
+  $('#btnExport').addEventListener('click', exportExcel);
+  $('#prev').addEventListener('click', ()=> search(Math.max(1, state.page-1)));
+  $('#next').addEventListener('click', ()=> search(state.page+1));
 
   // 頁面載入就查一次
-  search(1);
+  document.addEventListener('DOMContentLoaded', () => search(1));
 </script>
