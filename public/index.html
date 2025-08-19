@@ -809,7 +809,7 @@
     const addLine = (category, name, qty, description, rawPrice) => {
       const amt = R(rawPrice);
       if (amt <= 0) return 0;
-      PRICING_STATE.items.push({ category, name, qty, description, amount: amt }); // 前端保留 description（僅用於畫面/Excel）
+      PRICING_STATE.items.push({ category, name, qty, description, amount: amt }); // description 只用於前端與 Excel
       PRICING_STATE.total += amt;
       return amt;
     };
@@ -1074,6 +1074,35 @@
     return obj;
   }
 
+  // 以雙路徑送出（先 application/json，失敗再 text/plain）
+  async function _postPayload(url, payload){
+    const bodyText = JSON.stringify(payload);
+    const tryOnce = async (ctype) => {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': ctype, 'Accept': 'application/json' },
+        body: bodyText
+      });
+      const text = await resp.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { /* 不是 JSON 就略過 */ }
+      return { resp, text, data };
+    };
+
+    let r = await tryOnce('application/json');
+
+    // 若後端拋出 Unexpected end 或 5xx，再以 text/plain 重送一次（給用 JSON.parse(req.body) 的實作吃）
+    if (!r.resp.ok && ((r.text || '').includes('Unexpected end of JSON input') || r.resp.status >= 500)) {
+      r = await tryOnce('text/plain');
+    }
+
+    if (!r.resp.ok) {
+      const msg = (r.data && (r.data.error || r.data.message)) || r.text || `HTTP ${r.resp.status}`;
+      throw new Error(msg);
+    }
+    return r.data || { ok: true };
+  }
+
   async function saveQuote(){
     const btn = document.querySelector('button[onclick="saveQuote()"]');
     try{
@@ -1094,7 +1123,7 @@
       const tax5       = _toInt(_parseMoney(document.getElementById('tax').value));
       const grand      = _toInt(_parseMoney(document.getElementById('total-price').textContent));
 
-      // ✅ 只送後端有的欄位（不要送 description/desc）
+      // 僅送後端有的欄位（不要送 description/desc）
       const sanitizedItems = (PRICING_STATE.items || []).map(it => ({
         category: String(it.category || ''),
         name:     String(it.name || ''),
@@ -1115,30 +1144,16 @@
         supervision_fee: supervise8,
         tax: tax5,
         grand_total: grand,
-        form: raw
+        // 若後端要字串，可從這裡取；若要 JSON 物件，也可以忽略這欄
+        form_json: JSON.stringify(raw)
       };
+
       const payload = { quote, items: sanitizedItems };
 
-      const resp = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type':'application/json',
-          'Accept':'application/json',
-          'X-Requested-With':'XMLHttpRequest'
-        },
-        body: JSON.stringify(payload)
-      });
+      // 送出（內含 fallback）
+      const data = await _postPayload(API_URL, payload);
 
-      const rawText = await resp.text();
-      let data;
-      try { data = rawText ? JSON.parse(rawText) : {}; } catch { data = { message: rawText }; }
-
-      if (!resp.ok) {
-        const msg = data?.error || data?.message || `HTTP ${resp.status}`;
-        throw new Error(msg);
-      }
-
-      alert('已儲存成功！編號：' + (data.id || data.insertedId || '—'));
+      alert('已儲存成功！編號：' + (data?.id || data?.insertedId || '—'));
     }catch(err){
       console.error('SAVE_QUOTE_ERROR:', err);
       alert('儲存失敗：' + (err.message || err));
