@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const REALM = 'History Area';
-export const config = {
-  matcher: ['/history', '/history.html', '/api/search-quotes', '/api/quote-detail']
-};
+export const config = { matcher: ['/history', '/history.html'] };
 
 function decodeBase64Unicode(b64) {
   const bin = atob(b64);
