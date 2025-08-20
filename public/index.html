@@ -1124,29 +1124,31 @@
       const grand      = _toInt(_parseMoney(document.getElementById('total-price').textContent));
 
       // 僅送後端有的欄位（不要送 description/desc）
-      const sanitizedItems = (PRICING_STATE.items || []).map(it => ({
-        category: String(it.category || ''),
-        name:     String(it.name || ''),
-        qty:      Number(it.qty || 0),
-        amount:   _toInt(it.amount || 0)
-      }));
+const sanitizedItems = (PRICING_STATE.items || []).map(it => ({
+  category: String(it.category || ''),
+  name:     String(it.name || ''),
+  qty:      Number(it.qty || 0),
+  amount:   _toInt(it.amount || 0),
+  description: it.description ?? null
+}));
+
 
       // payload
-      const quote = {
-        quote_date: raw['date'] || null, // YYYY-MM-DD
-        client_name: raw['client_name'] || null,
-        address: raw['address'] || null,
-        style: style || null,
-        room_type: room || null,
-        base_ping: Number(raw['base_ping']) || null,
-        subtotal: Math.max(0, grand - other10 - supervise8 - tax5),
-        other_items: other10,
-        supervision_fee: supervise8,
-        tax: tax5,
-        grand_total: grand,
-        // 若後端要字串，可從這裡取；若要 JSON 物件，也可以忽略這欄
-        form_json: JSON.stringify(raw)
-      };
+const quote = {
+  quote_date: raw['date'] || null, // YYYY-MM-DD
+  client_name: raw['client_name'] || null,
+  address: raw['address'] || null,
+  style: style || null,
+  room_type: room || null,
+  base_ping: Number(raw['base_ping']) || null,
+  subtotal: Math.max(0, grand - other10 - supervise8 - tax5),
+  other_items: other10,
+  supervision_fee: supervise8,
+  tax: tax5,
+  grand_total: grand,
+  form: raw
+};
+
 
       const payload = { quote, items: sanitizedItems };
 
