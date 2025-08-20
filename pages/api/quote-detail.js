@@ -1,3 +1,4 @@
+// pages/api/quote-detail.js
 export default async function handler(req, res) {
   try {
     if (req.method !== 'GET' && req.method !== 'OPTIONS') {
@@ -15,12 +16,14 @@ export default async function handler(req, res) {
     if (!id) return res.status(400).json({ error: 'Missing id' });
 
     const qs = new URLSearchParams();
-    qs.set('select',
+    qs.set(
+      'select',
       [
         'id,created_at,quote_date,client_name,address,style,room_type,base_ping,',
         'subtotal,other_items,supervision_fee,tax,grand_total,',
         'form,',
-        'quote_items(id,category,name,qty,unit,unit_price,amount)'
+        // 只選實際存在的欄位
+        'quote_items(id,category,name,qty,description,amount)',
       ].join('')
     );
     qs.set('id', `eq.${id}`);
@@ -31,8 +34,8 @@ export default async function handler(req, res) {
       headers: {
         apikey: SRV_KEY,
         Authorization: `Bearer ${SRV_KEY}`,
-        Prefer: 'count=exact'
-      }
+        Prefer: 'count=exact',
+      },
     });
 
     const data = await resp.json().catch(() => ({}));
