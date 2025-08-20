@@ -6,11 +6,9 @@
   <title>歷史報價查詢</title>
   <meta name="robots" content="noindex,nofollow"/>
 
-  <!-- 样式 / Icon -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/darkly/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
-  <!-- 匯出 Excel 用 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <style>
@@ -145,17 +143,16 @@
                     <th>分類</th>
                     <th>項目</th>
                     <th class="text-end">數量</th>
-                    <th>單位</th>
-                    <th class="text-end">單價</th>
+                    <th>說明</th>
                     <th class="text-end">金額</th>
                   </tr>
                 </thead>
                 <tbody id="detailItemsBody">
-                  <tr><td colspan="6" class="text-muted text-center">無明細</td></tr>
+                  <tr><td colspan="5" class="text-muted text-center">無明細</td></tr>
                 </tbody>
                 <tfoot>
                   <tr>
-                    <th colspan="5" class="text-end">小計</th>
+                    <th colspan="4" class="text-end">小計</th>
                     <th class="text-end" id="itemsSubtotal">NT$ 0</th>
                   </tr>
                 </tfoot>
@@ -172,28 +169,33 @@
   </div>
 </div>
 
-<!-- JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  // --- 狀態與小工具 ---
+  // ====== 設定 ======
+  const API_LIST_PRIMARY = '/api/list-quotes';      // 我建議的列表 API
+  const API_LIST_FALLBACK = '/api/search-quotes';   // 你的既有端點（若有）
+  const API_DETAIL = '/api/quote-detail';
+
+  // ====== 共用 ======
   const state = { page: 1, limit: 20, lastResp: null, lastQuery: {} };
   const $ = (s) => document.querySelector(s);
 
-  function nt(n){ return (n ?? 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 }); }
-  function fmtMoney(n){ return 'NT$ ' + nt(Math.round(Number(n)||0)); }
-  function fmtDate(s){ return s ? String(s).slice(0,10) : ''; }
+  function nt(n){ return (Number(n) || 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 }); }
+  function money(n){ return 'NT$ ' + nt(Math.round(Number(n)||0)); }
+  function d8(s){ return s ? String(s).slice(0,10) : ''; }
 
-  // 👉 統一打 API（支援 Basic Auth 第二次重試）
-  async function apiGetJson(url, init = {}) {
+  async function fetchJSON(url, init = {}) {
     let resp = await fetch(url, { cache: 'no-store', ...init });
-    if (resp.status === 401) resp = await fetch(url, { cache: 'no-store', ...init });
     const text = await resp.text();
-    if (!resp.ok) throw new Error(\`HTTP \${resp.status} \${text || ''}\`);
-    try { return JSON.parse(text); } catch { return text; }
+    const ok = resp.ok;
+    let data;
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { message: text }; }
+    if (!ok) { const msg = data?.error || data?.message || ('HTTP ' + resp.status); throw new Error(msg); }
+    return data;
   }
 
   function setLoading(msg = '讀取中…') {
-    $('#tbody').innerHTML = \`<tr><td colspan="7" class="text-center text-muted py-4">\${msg}</td></tr>\`;
+    $('#tbody').innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">${msg}</td></tr>`;
     $('#summary').textContent = '';
     $('#prev').disabled = true;
     $('#next').disabled = true;
@@ -203,34 +205,66 @@
     const q = {
       style: $('#style').value.trim(),
       room_type: $('#room_type').value.trim(),
-      ping_min: $('#ping_min').value.trim(),
-      ping_max: $('#ping_max').value.trim(),
+      min_ping: $('#ping_min').value.trim(),
+      max_ping: $('#ping_max').value.trim(),
       from: $('#from').value.trim(),
       to: $('#to').value.trim(),
       page: state.page,
       limit: state.limit
     };
     Object.keys(q).forEach(k => { if(q[k] === '') delete q[k]; });
+    // list-quotes 用 min_ping/max_ping；search-quotes 用 ping_min/ping_max（一起帶）
+    if (q.min_ping && !q.ping_min) q.ping_min = q.min_ping;
+    if (q.max_ping && !q.ping_max) q.ping_max = q.max_ping;
     return q;
   }
 
+  // ====== 搜尋 ======
   async function search(page = 1){
     state.page = page;
     setLoading();
-    try{
-      const q = state.lastQuery = collectQuery();
-      const sp = new URLSearchParams(q);
-      const data = await apiGetJson('/api/search-quotes?' + sp.toString());
-      state.lastResp = data;
-      render(data);
-    }catch(err){
-      console.error(err);
-      $('#tbody').innerHTML =
-        \`<tr><td colspan="7" class="text-center text-danger py-4">查詢失敗：\${err.message || err}</td></tr>\`;
-      $('#summary').textContent = '共 0 筆';
+
+    const q = state.lastQuery = collectQuery();
+    const sp = new URLSearchParams(q);
+
+    // 先打 list-quotes，若 404/405 才退而求其次打 search-quotes
+    let data;
+    try {
+      data = await fetchJSON(`${API_LIST_PRIMARY}?${sp.toString()}`);
+    } catch (e) {
+      if (/404|405|not found|Method/i.test(String(e.message))) {
+        data = await fetchJSON(`${API_LIST_FALLBACK}?${sp.toString()}`);
+      } else {
+        throw e;
+      }
     }
+
+    state.lastResp = normalizeListPayload(data, q);
+    render(state.lastResp);
   }
 
+  // 把不同 API 的回傳整理成一致格式
+  function normalizeListPayload(raw, q){
+    // 支援：
+    // - { data: [...] }
+    // - { items: [...], total, page, hasNext }
+    // - 直接回傳陣列 [...]
+    const arr = Array.isArray(raw) ? raw
+              : Array.isArray(raw?.data) ? raw.data
+              : Array.isArray(raw?.items) ? raw.items
+              : [];
+
+    const page   = Number(raw?.page || q.page || 1);
+    const limit  = Number(q.limit || 20);
+    const total  = (typeof raw?.total === 'number') ? raw.total : undefined;
+    const hasNext = (typeof raw?.hasNext === 'boolean') ? raw.hasNext
+                    : (total != null) ? (page * limit < total)
+                    : (arr.length === limit); // 粗估
+
+    return { items: arr, page, total, hasNext };
+  }
+
+  // ====== 畫面 ======
   function render(resp){
     const tbody = $('#tbody');
     if(!resp || !Array.isArray(resp.items) || resp.items.length === 0){
@@ -241,25 +275,25 @@
       return;
     }
 
-    tbody.innerHTML = resp.items.map(r => \`
+    tbody.innerHTML = resp.items.map(r => `
       <tr>
-        <td>\${fmtDate(r.quote_date || r.created_at)}</td>
-        <td>\${r.client_name ?? ''}</td>
-        <td>\${r.style ?? ''}</td>
-        <td>\${r.room_type ?? ''}</td>
-        <td class="text-end">\${r.base_ping ?? ''}</td>
-        <td class="text-end">\${fmtMoney(r.grand_total)}</td>
+        <td>${d8(r.quote_date || r.created_at)}</td>
+        <td>${r.client_name ?? ''}</td>
+        <td>${r.style ?? ''}</td>
+        <td>${r.room_type ?? ''}</td>
+        <td class="text-end">${r.base_ping ?? ''}</td>
+        <td class="text-end">${money(r.grand_total)}</td>
         <td>
-          <button class="btn btn-sm btn-outline-info" onclick="showDetail('\${r.id}')">
+          <button class="btn btn-sm btn-outline-info" onclick="showDetail('${r.id}')">
             <i class="fa-solid fa-eye me-1"></i>查看
           </button>
         </td>
-      </tr>\`
+      </tr>`
     ).join('');
 
     const totalTxt = (resp.total != null)
-      ? \`共 \${resp.total.toLocaleString()} 筆，頁 \${resp.page}\`
-      : \`頁 \${resp.page}\`;
+      ? `共 ${resp.total.toLocaleString()} 筆，頁 ${resp.page}`
+      : `頁 ${resp.page}`;
     $('#summary').textContent = totalTxt;
 
     $('#prev').disabled = (resp.page <= 1);
@@ -267,12 +301,12 @@
   }
 
   function exportExcel(){
+    const rows = [['日期','客戶','風格','房型','坪數','總價','ID']];
     const items = state?.lastResp?.items || [];
     if(items.length === 0){ alert('沒有可匯出的資料'); return; }
-    const rows = [['日期','客戶','風格','房型','坪數','總價','ID']];
     items.forEach(r=>{
       rows.push([
-        fmtDate(r.quote_date || r.created_at),
+        d8(r.quote_date || r.created_at),
         r.client_name || '',
         r.style || '',
         r.room_type || '',
@@ -285,55 +319,62 @@
     const ws = XLSX.utils.aoa_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, '歷史報價');
     const ts = new Date().toISOString().replace(/[-:T]/g,'').slice(0,12);
-    XLSX.writeFile(wb, \`歷史報價_\${ts}.xlsx\`);
+    XLSX.writeFile(wb, `歷史報價_${ts}.xlsx`);
   }
 
+  // ====== 詳情 ======
   async function showDetail(id){
     try{
-      const row = await apiGetJson('/api/quote-detail?id=' + encodeURIComponent(id));
+      const raw = await fetchJSON(`${API_DETAIL}?id=${encodeURIComponent(id)}`);
+      const row =
+        (raw && raw.data && (raw.data[0] || raw.data)) ? (Array.isArray(raw.data)?raw.data[0]:raw.data) :
+        (raw && raw.item) ? raw.item :
+        raw;
 
       const base = [
-        { label:'日期', value: fmtDate(row.quote_date || row.created_at) },
+        { label:'日期', value: d8(row.quote_date || row.created_at) },
         { label:'客戶', value: row.client_name || '' },
         { label:'地址', value: row.address || '' },
         { label:'風格', value: row.style || '' },
         { label:'房型', value: row.room_type || '' },
         { label:'坪數', value: row.base_ping ?? '' },
-        { label:'小計', value: fmtMoney(row.subtotal) },
-        { label:'其他項目(10%)', value: fmtMoney(row.other_items) },
-        { label:'監工費(8%)', value: fmtMoney(row.supervision_fee) },
-        { label:'稅額(5%)', value: fmtMoney(row.tax) },
-        { label:'總價', value: fmtMoney(row.grand_total) },
+        { label:'小計', value: money(row.subtotal) },
+        { label:'其他項目(10%)', value: money(row.other_items) },
+        { label:'監工費(8%)', value: money(row.supervision_fee) },
+        { label:'稅額(5%)', value: money(row.tax) },
+        { label:'總價', value: money(row.grand_total) },
         { label:'編號', value: row.id }
       ];
-      $('#detailBase').innerHTML = base.map(b => \`
+      $('#detailBase').innerHTML = base.map(b => `
         <div class="col-md-4">
           <div class="p-2 border rounded">
-            <div class="text-muted small">\${b.label}</div>
-            <div class="fw-semibold">\${b.value ?? ''}</div>
+            <div class="text-muted small">${b.label}</div>
+            <div class="fw-semibold">${b.value ?? ''}</div>
           </div>
-        </div>\`).join('');
+        </div>`).join('');
 
-      const items = Array.isArray(row.quote_items) ? row.quote_items : [];
-      if(items.length === 0){
+      const list = Array.isArray(row.quote_items) ? row.quote_items
+                 : Array.isArray(row.items) ? row.items
+                 : [];
+
+      if(list.length === 0){
         $('#detailItemsBody').innerHTML =
-          '<tr><td colspan="6" class="text-muted text-center">無明細</td></tr>';
+          '<tr><td colspan="5" class="text-muted text-center">無明細</td></tr>';
         $('#itemsSubtotal').textContent = 'NT$ 0';
       }else{
         let sub = 0;
-        $('#detailItemsBody').innerHTML = items.map(it=>{
+        $('#detailItemsBody').innerHTML = list.map(it=>{
           sub += Number(it.amount)||0;
-          return \`
+          return `
             <tr>
-              <td>\${it.category ?? ''}</td>
-              <td>\${it.name ?? ''}</td>
-              <td class="text-end">\${it.qty ?? ''}</td>
-              <td>\${it.unit ?? ''}</td>
-              <td class="text-end">\${fmtMoney(it.unit_price)}</td>
-              <td class="text-end">\${fmtMoney(it.amount)}</td>
-            </tr>\`;
+              <td>${it.category ?? ''}</td>
+              <td>${it.name ?? ''}</td>
+              <td class="text-end">${it.qty ?? ''}</td>
+              <td>${it.description ?? ''}</td>
+              <td class="text-end">${money(it.amount)}</td>
+            </tr>`;
         }).join('');
-        $('#itemsSubtotal').textContent = fmtMoney(sub);
+        $('#itemsSubtotal').textContent = money(sub);
       }
 
       $('#detailForm').textContent = JSON.stringify(row.form || {}, null, 2);
@@ -341,11 +382,11 @@
       new bootstrap.Modal($('#detailModal')).show();
     }catch(err){
       console.error(err);
-      alert(err.message || err);
+      alert('讀取詳情失敗：' + (err.message || err));
     }
   }
 
-  // 綁事件（等 DOM 渲染完成）
+  // ====== 綁事件 ======
   document.addEventListener('DOMContentLoaded', () => {
     $('#btnSearch').addEventListener('click', ()=>search(1));
     $('#btnReset').addEventListener('click', ()=>{
@@ -357,7 +398,7 @@
     $('#prev').addEventListener('click', ()=> search(Math.max(1, state.page-1)));
     $('#next').addEventListener('click', ()=> search(state.page+1));
 
-    // 首次載入就查一次
+    // 進頁就查一次
     search(1);
   });
 </script>
