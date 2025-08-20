@@ -1,78 +1,66 @@
-name: Daily Supabase DB Backup
+name: Supabase DB Backup
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:        # 手動觸發
   schedule:
-    - cron: "0 18 * * *"          # 每天 02:00（台灣時間 +08）執行，可自行調整
+    - cron: '0 21 * * *'    # 每天 05:00 台灣時間（UTC+8）→ 21:00 UTC
+
+permissions:
+  contents: read
 
 jobs:
   backup:
     runs-on: ubuntu-latest
+    # 如果你的 DATABASE_URL 放在某個 Environment（例如 "production"），就打開下一行：
+    # environment: production
 
     steps:
-      - name: Install PostgreSQL client
+      - name: Install pg_dump (postgresql-client)
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      # 從 DATABASE_URL 解析出 host/user/pass/db/port，並強制取 IPv4
-      - name: Parse DATABASE_URL and resolve IPv4
+      - name: Check secrets and show versions
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        shell: bash
         run: |
           set -euo pipefail
-          url="$DATABASE_URL"
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "❌ DATABASE_URL secret is missing or empty."
+            echo "請到 GitHub → Settings → Secrets and variables → Actions 設定 DATABASE_URL。"
+            exit 1
+          fi
+          echo "::add-mask::${DATABASE_URL}"
+          echo "✅ DATABASE_URL is present."
+          psql --version
+          pg_dump --version
 
-          # 去掉協定
-          rest="${url#*://}"
-
-          # 解析使用者密碼與 host… 等
-          creds="${rest%@*}"                 # user:pass
-          hostrest="${rest#*@}"              # host:port/db?params
-
-          DB_USER="${creds%%:*}"
-          DB_PASS="${creds#*:}"
-
-          hostport="${hostrest%%/*}"         # host:port
-          DB_HOST="${hostport%%:*}"
-          DB_PORT="${hostport#*:}"
-          [[ "$DB_PORT" == "$DB_HOST" ]] && DB_PORT=5432   # 沒寫 port 就用 5432
-
-          dbq="${hostrest#*/}"               # db?params
-          DB_NAME="${dbq%%\?*}"
-
-          # 強制解析 IPv4（第一個 A 紀錄）
-          IPV4=$(getent ahostsv4 "$DB_HOST" | awk '/STREAM/ {print $1; exit}')
-
-          # 匯出給後續步驟用（注意不要 echo 出密碼）
-          echo "DB_USER=$DB_USER"         >> $GITHUB_ENV
-          echo "DB_NAME=$DB_NAME"         >> $GITHUB_ENV
-          echo "DB_HOST_IPV4=$IPV4"       >> $GITHUB_ENV
-          echo "DB_PORT=$DB_PORT"         >> $GITHUB_ENV
-          echo "PGPASSWORD=$DB_PASS"      >> $GITHUB_ENV
-          echo "PGSSLMODE=require"        >> $GITHUB_ENV
-
-      # （可選）測試能否連線
-      - name: Test connection
-        shell: bash
+      - name: Connectivity test (psql)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          psql -h "$DB_HOST_IPV4" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "select now();" >/dev/null
+          set -euo pipefail
+          # 一定要包含 sslmode=require，且用 Direct 連線 (5432)
+          # 會印出時間，確認連得上
+          psql "$DATABASE_URL" -tAc "select now();"
 
       - name: Dump database
-        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          TS=$(date -u +'%Y%m%d-%H%M%S')
-          FILE="supabase-${TS}.dump"
-          # 使用 IPv4 位址 + SSL 連線進行備份
-          pg_dump -h "$DB_HOST_IPV4" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-                  --format=custom --no-owner --blobs \
-                  -f "$FILE"
-          echo "BACKUP_FILE=$FILE" >> $GITHUB_ENV
+          set -euo pipefail
+          TS="$(date -u +'%Y%m%d-%H%M%S')"
+          mkdir -p backups
+          # 使用 custom 格式（.dump）較適合還原/壓縮
+          pg_dump --dbname="$DATABASE_URL" \
+                  --no-owner \
+                  --format=custom \
+                  --file="backups/supabase-${TS}.dump"
+          ls -lh backups
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: supabase-backup
-          path: ${{ env.BACKUP_FILE }}
-          retention-days: 14
+          path: backups/*.dump
+          retention-days: 7
