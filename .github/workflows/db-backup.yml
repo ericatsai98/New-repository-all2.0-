@@ -1,0 +1,28 @@
+name: Daily Supabase DB Backup
+
+on:
+  workflow_dispatch:        # 手動觸發
+  schedule:
+    - cron: '0 18 * * *'    # 每日 18:00 UTC 執行 = 台灣時間每日 02:00
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install pg_dump
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          TS=$(date -u +'%Y%m%d-%H%M%S')
+          mkdir -p backups
+          pg_dump "$DATABASE_URL" --format=custom --no-owner --no-privileges -f "backups/supabase-$TS.dump"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup
+          path: backups/
+          retention-days: 30
