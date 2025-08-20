@@ -4,12 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>室內裝修報價系統 - 完整版</title>
-  <!-- 阻止搜尋引擎索引 -->
   <meta name="robots" content="noindex, nofollow">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/darkly/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-  <!-- SheetJS 官方版本 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; }
@@ -656,7 +654,7 @@
             </div>
           </div>
 
-          <!-- 計算結果 -->
+          <!-- 按鈕 -->
           <div class="row">
             <div class="col-12">
               <div class="d-grid gap-2">
@@ -678,7 +676,6 @@
       <!-- 價格顯示區域 -->
       <div class="col-lg-4">
         <div class="sticky-top" style="top: 2rem;">
-          <!-- 總價顯示 -->
           <div class="card mb-4">
             <div class="card-header text-center">
               <h5 class="card-title mb-0">
@@ -690,7 +687,6 @@
             </div>
           </div>
 
-          <!-- 價格明細 -->
           <div class="card">
             <div class="card-header">
               <h6 class="card-title mb-0">
@@ -708,629 +704,474 @@
     </div>
   </div>
 
-  <script>
-    let bedFrameCount = 0;
+  <!-- 單一、乾淨的腳本區 -->
+<script>
+  // ========= 共用工具 =========
+  const R = (n) => Math.round(Number(n) || 0);
+  const money = (n) => 'NT$ ' + R(n).toLocaleString('zh-TW');
+  const _parseMoney = (s) => Number(String(s||'').replace(/[^\d.-]/g,'')) || 0;
 
-    // 初始化日期
-    document.addEventListener('DOMContentLoaded', function () {
-      const today = new Date();
-      const formattedDate = today.toISOString().split('T')[0];
-      document.getElementById('date').value = formattedDate;
-      calculatePricing();
-    });
+  // 如果 API 跑在別的網域，請把這行改成絕對網址，例如：
+  // const API_URL = 'https://你的專案域名.vercel.app/api/save-quote';
+  const API_URL = '/api/save-quote';
 
-    function toggleCustomInput(fieldName) {
-      const select = document.getElementById(fieldName);
-      const customInput = document.getElementById(fieldName + '_custom');
-
-      if (select.value === '其他') {
-        customInput.classList.add('show');
-      } else {
-        customInput.classList.remove('show');
-        customInput.value = '';
-      }
-
-      if (select.value === 'custom') {
-        customInput.classList.add('show');
-      } else if (fieldName !== 'style' && fieldName !== 'room_type') {
-        customInput.classList.remove('show');
-        customInput.value = '';
-      }
+  // 讓金額都用整數，並在儲存前做基本檢查
+  const _toInt = (n) => Math.round(Number(n) || 0);
+  function _validateBeforeSave() {
+    const basePing = parseFloat(document.getElementById('base_ping').value) || 0;
+    if (basePing < 12) throw new Error('請先輸入基準坪數（至少 12 坪）');
+    if (!PRICING_STATE.items || PRICING_STATE.items.length === 0) {
+      throw new Error('尚未選擇任何項目，沒有可以儲存的明細');
     }
+  }
 
-    function addBedFrame() {
-      bedFrameCount++;
-      const container = document.getElementById('bed-frames-container');
-      const bedFrameDiv = document.createElement('div');
-      bedFrameDiv.className = 'row mb-3 bed-frame-row';
-      bedFrameDiv.innerHTML = `
-        <div class="col-3">
-          <label class="form-label">床架 ${bedFrameCount}</label>
-          <button type="button" class="btn btn-outline-danger btn-sm d-block" onclick="removeBedFrame(this)">
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
-        <div class="col-3">
-          <label class="form-label">長(cm)</label>
-          <input type="number" class="form-control bed-frame-length" min="0" step="1" value="0" onchange="calculatePricing()">
-        </div>
-        <div class="col-3">
-          <label class="form-label">寬(cm)</label>
-          <input type="number" class="form-control bed-frame-width" min="0" step="1" value="0" onchange="calculatePricing()">
-        </div>
-        <div class="col-3">
-          <label class="form-label">金額</label>
-          <input type="text" class="form-control bed-frame-total auto-calc" readonly>
-        </div>
-      `;
-      container.appendChild(bedFrameDiv);
-      calculatePricing();
-    }
+  // ========= 狀態（給 Excel/儲存共用）=========
+  let bedFrameCount = 0;
+  let PRICING_STATE = { items: [], total: 0 };
 
-    function removeBedFrame(button) {
-      button.closest('.bed-frame-row').remove();
-      calculatePricing();
-    }
-
-    function getStyleValue() {
-      const styleSelect = document.getElementById('style');
-      const customInput = document.getElementById('style_custom');
-      if (styleSelect.value === '其他' && customInput.value.trim()) {
-        return customInput.value.trim();
-      }
-      return styleSelect.value || '未選擇';
-    }
-
-    function getRoomTypeValue() {
-      const roomTypeSelect = document.getElementById('room_type');
-      const customInput = document.getElementById('room_type_custom');
-      if (roomTypeSelect.value === '其他' && customInput.value.trim()) {
-        return customInput.value.trim();
-      }
-      return roomTypeSelect.value || '未選擇';
-    }
-
-    function calculatePricing() {
-      const basePing = parseFloat(document.getElementById('base_ping').value) || 0;
-      if (basePing < 12) return;
-
-      let breakdown = [];
-      let total = 0;
-
-      // 基礎工程
-      const baseProjects = [
-        { id: 'paint', name: '油漆', basePrice: 90000, basePing: 12, increment: 6000 },
-        { id: 'electrical', name: '水電', basePrice: 60000, basePing: 12, increment: 5000 },
-        { id: 'lighting', name: '燈具', basePrice: 45000, basePing: 12, increment: 3000 },
-        { id: 'glass', name: '玻璃', basePrice: 25000, basePing: 12, increment: 3000 }
-      ];
-      baseProjects.forEach(project => {
-        if (document.getElementById(project.id).checked) {
-          const price = project.basePrice + (basePing - project.basePing) * project.increment;
-          breakdown.push({ name: project.name, price });
-          total += price;
-        }
-      });
-
-      // 木作工程
-      const woodworkItems = [
-        { id: 'aircond_woodwork', name: '冷氣+窗簾盒', price: 1500 },
-        { id: 'wall_panel', name: '壁板', price: 4500 },
-        { id: 'low_screen_simple', name: '矮屏(無造型)', price: 2500 },
-        { id: 'low_screen_curved', name: '矮屏(有弧度)', price: 3000 },
-        { id: 'sliding_door_wood', name: '拉門(含五金)', price: 33000 },
-        { id: 'room_door', name: '房門(含五金)', price: 33000 },
-        { id: 'flat_ceiling', name: '平釘天花板', price: 6500 },
-        { id: 'decorative_ceiling', name: '造型天花板', price: 7000 },
-        { id: 'partition_simple', name: '隔間(無造型)', price: 4000 },
-        { id: 'partition_curved', name: '隔間(有弧度)', price: 5000 },
-        { id: 'wall_ac_slot', name: '壁掛冷氣凹槽', price: 4500 },
-        { id: 'ceiling_ac_slot', name: '吊隱冷氣凹槽', price: 8500 }
-      ];
-      let woodworkTotal = 0;
-      woodworkItems.forEach(item => {
-        const value = parseFloat(document.getElementById(item.id).value) || 0;
-        if (value > 0) {
-          const itemTotal = value * item.price;
-          breakdown.push({ name: item.name, price: itemTotal });
-          total += itemTotal;
-          woodworkTotal += itemTotal;
-        }
-      });
-
-      // 床架（cm × cm × 1）
-      let bedFramesSum = 0;
-      const bedFrames = document.querySelectorAll('.bed-frame-row');
-      bedFrames.forEach((frame, index) => {
-        const length = parseFloat(frame.querySelector('.bed-frame-length').value) || 0;
-        const width  = parseFloat(frame.querySelector('.bed-frame-width').value)  || 0;
-        const bedFrameTotal = length * width; // 1 元/平方公分
-        frame.querySelector('.bed-frame-total').value = bedFrameTotal.toLocaleString();
-        if (bedFrameTotal > 0) {
-          breakdown.push({ name: `床架 ${index + 1}`, price: bedFrameTotal });
-          total += bedFrameTotal;
-          bedFramesSum += bedFrameTotal;
-        }
-      });
-
-      // 系統櫃
-      const systemItems = [
-        { id: 'nightstand', name: '床頭櫃', price: 6000 },
-        { id: 'wall_cabinet_door', name: '吊櫃(有門片)', price: 5500 },
-        { id: 'wall_cabinet_no_door', name: '吊櫃(無門片)', price: 5000 },
-        { id: 'tall_cabinet_no_drawer', name: '高櫃(含書櫃40-50cm無抽屜)', price: 7500 },
-        { id: 'tall_cabinet_with_drawer', name: '高櫃(含書櫃40-50cm有抽屜)', price: 8000 },
-        { id: 'wardrobe_door_60cm', name: '衣櫃(門片含收納櫃60cm)', price: 8500 },
-        { id: 'wardrobe_slide_60cm', name: '衣櫃(拉門含收納櫃60cm)', price: 9000 },
-        { id: 'appliance_cabinet', name: '電器櫃', price: 8000 },
-        { id: 'desk', name: '書桌', price: 6000 },
-        { id: 'low_cabinet_no_drawer', name: '矮櫃(無抽屜)', price: 6000 },
-        { id: 'low_cabinet_with_drawer', name: '矮櫃(有抽屜)', price: 7000 },
-        { id: 'tv_cabinet', name: '電視櫃', price: 4000 },
-        { id: 'system_wall_panel', name: '壁板', price: 3000 }
-      ];
-      let systemTotal = 0;
-      systemItems.forEach(item => {
-        const value = parseFloat(document.getElementById(item.id).value) || 0;
-        if (value > 0) {
-          const itemTotal = value * item.price;
-          breakdown.push({ name: item.name, price: itemTotal });
-          total += itemTotal;
-          systemTotal += itemTotal;
-        }
-      });
-      // 關鍵：把床架金額併入系統櫃總額
-      systemTotal += bedFramesSum;
-
-      // 鐵件拉門
-      const ironSlidingDoorValue = parseFloat(document.getElementById('iron_sliding_door').value) || 0;
-      if (ironSlidingDoorValue > 0) {
-        const ironSlidingDoorTotal = ironSlidingDoorValue * 28000;
-        breakdown.push({ name: '鐵件拉門(含五金)', price: ironSlidingDoorTotal });
-        total += ironSlidingDoorTotal;
-      }
-
-      // 開關面板
-      const switchPanel = document.getElementById('switch_panel').value;
-      let switchPanelPrice = 0;
-      if (switchPanel === 'starlight') switchPanelPrice = 7000 + (basePing - 12) * 600;
-      else if (switchPanel === 'risna') switchPanelPrice = 9000 + (basePing - 12) * 700;
-      document.getElementById('switch_panel_calc').value = `NT$ ${switchPanelPrice.toLocaleString()}`;
-      breakdown.push({ name: '開關面板', price: switchPanelPrice });
-      total += switchPanelPrice;
-
-      // 特殊工程
-      const largeBoardSelect = document.getElementById('large_board');
-      const largeBoardCustom = document.getElementById('large_board_custom');
-      let largeBoardPrice = 0;
-      if (largeBoardSelect.value === 'custom' && largeBoardCustom.value) largeBoardPrice = parseFloat(largeBoardCustom.value) || 0;
-      else largeBoardPrice = parseFloat(largeBoardSelect.value) || 0;
-      if (largeBoardPrice > 0) { breakdown.push({ name: '石作工程-大板', price: largeBoardPrice }); total += largeBoardPrice; }
-
-      const specialPaintSelect = document.getElementById('special_paint');
-      const specialPaintCustom = document.getElementById('special_paint_custom');
-      let specialPaintPrice = 0;
-      if (specialPaintSelect.value === 'custom' && specialPaintCustom.value) specialPaintPrice = parseFloat(specialPaintCustom.value) || 0;
-      else specialPaintPrice = parseFloat(specialPaintSelect.value) || 0;
-      if (specialPaintPrice > 0) { breakdown.push({ name: '特殊漆工程-特殊漆', price: specialPaintPrice }); total += specialPaintPrice; }
-
-      const ironworkSelect = document.getElementById('ironwork');
-      const ironworkCustom = document.getElementById('ironwork_custom');
-      let ironworkPrice = 0;
-      if (ironworkSelect.value === 'custom' && ironworkCustom.value) ironworkPrice = parseFloat(ironworkCustom.value) || 0;
-      else ironworkPrice = parseFloat(ironworkSelect.value) || 0;
-      if (ironworkPrice > 0) { breakdown.push({ name: '鐵件工程-鐵件', price: ironworkPrice }); total += ironworkPrice; }
-
-      const titaniumStripsSelect = document.getElementById('titanium_strips');
-      const titaniumStripsCustom = document.getElementById('titanium_strips_custom');
-      let titaniumStripsPrice = 0;
-      if (titaniumStripsSelect.value === 'custom' && titaniumStripsCustom.value) titaniumStripsPrice = parseFloat(titaniumStripsCustom.value) || 0;
-      else titaniumStripsPrice = parseFloat(titaniumStripsSelect.value) || 0;
-      if (titaniumStripsPrice > 0) { breakdown.push({ name: '金屬工程-鈦金條', price: titaniumStripsPrice }); total += titaniumStripsPrice; }
-
-      // 其他單價項目
-      const miscItems = [
-        { id: 'cleaning', name: '清潔 (全室含衛浴/陽台/廚房)', price: 1200 },
-        { id: 'wood_flooring', name: '木地板 (不含衛浴/陽台/廚房)', price: 6500 },
-        { id: 'protection', name: '室內保護', price: 1000 }
-      ];
-      miscItems.forEach(item => {
-        const value = parseFloat(document.getElementById(item.id).value) || 0;
-        if (value > 0) {
-          const itemTotal = value * item.price;
-          breakdown.push({ name: item.name, price: itemTotal });
-          total += itemTotal;
-        }
-      });
-
-      // 其他項目（鋁框吊框 / 高門框）
-      const otherItems = [
-        { id: 'aluminum_40x70', name: '鋁框吊框 40*70', price: 2300 },
-        { id: 'aluminum_45x70', name: '鋁框吊框 45*70', price: 2600 },
-        { id: 'aluminum_50x70', name: '鋁框吊框 50*70', price: 3000 },
-        { id: 'tall_frame_40x240', name: '高門框 40*240', price: 7500 },
-        { id: 'tall_frame_45x240', name: '高門框 45*240', price: 8500 },
-        { id: 'tall_frame_50x240', name: '高門框 50*240', price: 9500 }
-      ];
-      otherItems.forEach(item => {
-        const value = parseFloat(document.getElementById(item.id).value) || 0;
-        if (value > 0) {
-          const itemTotal = value * item.price;
-          breakdown.push({ name: item.name, price: itemTotal });
-          total += itemTotal;
-        }
-      });
-
-      // 自動項目：木作五金 5%
-      const woodworkHardware = woodworkTotal * 0.05;
-      document.getElementById('woodwork_hardware').value = `NT$ ${woodworkHardware.toLocaleString()}`;
-      if (woodworkHardware > 0) { breakdown.push({ name: '木作五金', price: woodworkHardware }); total += woodworkHardware; }
-
-      // 自動項目：系統五金/運費/組裝（包含床架）
-      const systemHardware = systemTotal * 0.05;
-      const systemShipping = systemTotal * 0.05;
-      const systemAssembly = systemTotal * 0.20;
-      document.getElementById('system_hardware').value = `NT$ ${systemHardware.toLocaleString()}`;
-      document.getElementById('system_shipping').value = `NT$ ${systemShipping.toLocaleString()}`;
-      document.getElementById('system_assembly').value = `NT$ ${systemAssembly.toLocaleString()}`;
-      if (systemHardware > 0) { breakdown.push({ name: '系統五金', price: systemHardware }); total += systemHardware; }
-      if (systemShipping > 0) { breakdown.push({ name: '運費', price: systemShipping }); total += systemShipping; }
-      if (systemAssembly > 0) { breakdown.push({ name: '組裝費', price: systemAssembly }); total += systemAssembly; }
-
-      // 自動項目：其他項目 10%
-      const otherItemsAmount = total * 0.10;
-      document.getElementById('other_items').value = `NT$ ${otherItemsAmount.toLocaleString()}`;
-      if (otherItemsAmount > 0) { breakdown.push({ name: '其他項目', price: otherItemsAmount }); total += otherItemsAmount; }
-
-      // 自動項目：監工費 8%
-      const supervisionFee = total * 0.08;
-      document.getElementById('supervision_fee').value = `NT$ ${supervisionFee.toLocaleString()}`;
-      if (supervisionFee > 0) { breakdown.push({ name: '監工費', price: supervisionFee }); total += supervisionFee; }
-
-      // 自動項目：稅額 5%
-      const tax = total * 0.05;
-      document.getElementById('tax').value = `NT$ ${tax.toLocaleString()}`;
-      if (tax > 0) { breakdown.push({ name: '稅額', price: tax }); total += tax; }
-
-      // 更新顯示
-      updatePricingDisplay(breakdown, total);
-    }
-
-    function updatePricingDisplay(breakdown, total) {
-      const totalElement = document.getElementById('total-price');
-      const container = document.getElementById('pricing-breakdown');
-
-      let html = '';
-      if (breakdown.length === 0) {
-        html = '<p class="text-muted text-center">請選擇項目來查看明細</p>';
-      } else {
-        breakdown.forEach(item => {
-          html += `
-            <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-              <span class="fw-medium">${item.name}</span>
-              <span class="text-primary fw-bold">NT$ ${item.price.toLocaleString()}</span>
-            </div>
-          `;
-        });
-      }
-
-      container.innerHTML = html;
-      totalElement.textContent = `NT$ ${total.toLocaleString()}`;
-    }
-
-    function exportToExcel() {
-      // ===== 客戶資料 =====
-      const clientData = [
-        ["客戶名稱", document.getElementById('client_name').value || '未填寫'],
-        ["報價日期", document.getElementById('date').value || '未填寫'],
-        ["地址", document.getElementById('address').value || '未填寫'],
-        ["風格", getStyleValue()],
-        ["房型", getRoomTypeValue()],
-        ["基準坪數", document.getElementById('base_ping').value || '0']
-      ];
-      const basePing = parseFloat(document.getElementById('base_ping').value) || 0;
-
-      // ===== 逐步累加，確保與畫面總價一致（計算順序相同） =====
-      const items = [];
-      let total = 0;
-
-      // 基礎工程
-      const baseProjects = [
-        { id: 'paint', name: '油漆', category: '基礎工程', basePrice: 90000, basePing: 12, increment: 6000 },
-        { id: 'electrical', name: '水電', category: '基礎工程', basePrice: 60000, basePing: 12, increment: 5000 },
-        { id: 'lighting', name: '燈具', category: '基礎工程', basePrice: 45000, basePing: 12, increment: 3000 },
-        { id: 'glass', name: '玻璃', category: '基礎工程', basePrice: 25000, basePing: 12, increment: 3000 }
-      ];
-      baseProjects.forEach(p => {
-        if (document.getElementById(p.id).checked) {
-          const price = p.basePrice + (basePing - p.basePing) * p.increment;
-          items.push([p.category, p.name, 1, `基數${p.basePrice}+(${basePing}-12)*${p.increment}`, price]);
-          total += price;
-        }
-      });
-
-      // 木作工程
-      const woodworkItems = [
-        { id: 'aircond_woodwork', name: '冷氣+窗簾盒', category: '木作工程', price: 1500, unit: '尺' },
-        { id: 'wall_panel', name: '壁板', category: '木作工程', price: 4500, unit: '尺' },
-        { id: 'low_screen_simple', name: '矮屏(無造型)', category: '木作工程', price: 2500, unit: '尺' },
-        { id: 'low_screen_curved', name: '矮屏(有弧度)', category: '木作工程', price: 3000, unit: '尺' },
-        { id: 'sliding_door_wood', name: '拉門(含五金)', category: '木作工程', price: 33000, unit: '樘' },
-        { id: 'room_door', name: '房門(含五金)', category: '木作工程', price: 33000, unit: '樘' },
-        { id: 'flat_ceiling', name: '平釘天花板', category: '木作工程', price: 6500, unit: '坪' },
-        { id: 'decorative_ceiling', name: '造型天花板', category: '木作工程', price: 7000, unit: '坪' },
-        { id: 'partition_simple', name: '隔間(無造型)', category: '木作工程', price: 4000, unit: '尺' },
-        { id: 'partition_curved', name: '隔間(有弧度)', category: '木作工程', price: 5000, unit: '尺' },
-        { id: 'wall_ac_slot', name: '壁掛冷氣凹槽', category: '木作工程', price: 4500, unit: '空間' },
-        { id: 'ceiling_ac_slot', name: '吊隱冷氣凹槽', category: '木作工程', price: 8500, unit: '空間' }
-      ];
-      let woodworkTotal = 0;
-      woodworkItems.forEach(item => {
-        const value = parseFloat(document.getElementById(item.id).value) || 0;
-        if (value > 0) {
-          const amt = value * item.price;
-          items.push([item.category, item.name, value, `${value}${item.unit} × ${item.price}`, amt]);
-          total += amt;
-          woodworkTotal += amt;
-        }
-      });
-
-      // 床架（cm × cm × 1）
-      const bedRows = document.querySelectorAll('.bed-frame-row');
-      let bfIdx = 1;
-      let bedFramesSum = 0;
-      bedRows.forEach(row => {
-        const L = parseFloat(row.querySelector('.bed-frame-length').value) || 0;
-        const W = parseFloat(row.querySelector('.bed-frame-width').value) || 0;
-        const amt = L * W;
-        if (amt > 0) {
-          items.push(['床架', `床架 ${bfIdx++}`, 1, `${L}cm × ${W}cm × 1`, amt]);
-          total += amt;
-          bedFramesSum += amt;
-        }
-      });
-
-      // 系統櫃
-      const systemItems = [
-        { id: 'nightstand', name: '床頭櫃', category: '系統櫃', price: 6000, unit: '尺' },
-        { id: 'wall_cabinet_door', name: '吊櫃(有門片)', category: '系統櫃', price: 5500, unit: '尺' },
-        { id: 'wall_cabinet_no_door', name: '吊櫃(無門片)', category: '系統櫃', price: 5000, unit: '尺' },
-        { id: 'tall_cabinet_no_drawer', name: '高櫃(含書櫃40-50cm無抽屜)', category: '系統櫃', price: 7500, unit: '尺' },
-        { id: 'tall_cabinet_with_drawer', name: '高櫃(含書櫃40-50cm有抽屜)', category: '系統櫃', price: 8000, unit: '尺' },
-        { id: 'wardrobe_door_60cm', name: '衣櫃(門片含收納櫃60cm)', category: '系統櫃', price: 8500, unit: '尺' },
-        { id: 'wardrobe_slide_60cm', name: '衣櫃(拉門含收納櫃60cm)', category: '系統櫃', price: 9000, unit: '尺' },
-        { id: 'appliance_cabinet', name: '電器櫃', category: '系統櫃', price: 8000, unit: '尺' },
-        { id: 'desk', name: '書桌', category: '系統櫃', price: 6000, unit: '尺' },
-        { id: 'low_cabinet_no_drawer', name: '矮櫃(無抽屜)', category: '系統櫃', price: 6000, unit: '尺' },
-        { id: 'low_cabinet_with_drawer', name: '矮櫃(有抽屜)', category: '系統櫃', price: 7000, unit: '尺' },
-        { id: 'tv_cabinet', name: '電視櫃', category: '系統櫃', price: 4000, unit: '尺' },
-        { id: 'system_wall_panel', name: '壁板', category: '系統櫃', price: 3000, unit: '尺' }
-      ];
-      let systemTotal = 0;
-      systemItems.forEach(item => {
-        const value = parseFloat(document.getElementById(item.id).value) || 0;
-        if (value > 0) {
-          const amt = value * item.price;
-          items.push([item.category, item.name, value, `${value}${item.unit} × ${item.price}`, amt]);
-          total += amt;
-          systemTotal += amt;
-        }
-      });
-      // 把床架併入系統櫃總額（影響五金/運費/組裝）
-      systemTotal += bedFramesSum;
-
-      // 鐵件拉門
-      const ironSlidingDoorValue = parseFloat(document.getElementById('iron_sliding_door').value) || 0;
-      if (ironSlidingDoorValue > 0) {
-        const amt = ironSlidingDoorValue * 28000;
-        items.push(['鐵件拉門', '鐵件拉門(含五金)', ironSlidingDoorValue, `${ironSlidingDoorValue}樘 × 28000`, amt]);
-        total += amt;
-      }
-
-      // 開關面板
-      const sp = document.getElementById('switch_panel').value;
-      let spPrice = 0, spDesc = '';
-      if (sp === 'starlight') {
-        spPrice = 7000 + (basePing - 12) * 600;
-        spDesc = `星光 - 基數7000+(${basePing}-12)*600`;
-      } else if (sp === 'risna') {
-        spPrice = 9000 + (basePing - 12) * 700;
-        spDesc = `Risna - 基數9000+(${basePing}-12)*700`;
-      }
-      items.push(['開關面板', '開關面板', 1, spDesc, spPrice]);
-      total += spPrice;
-
-      // 特殊工程
-      const addSelectItem = (selId, customId, cat, name) => {
-        const sel = document.getElementById(selId);
-        const custom = document.getElementById(customId);
-        let price = 0, desc = '';
-        if (sel.value === 'custom' && custom.value) { price = parseFloat(custom.value) || 0; desc = '自訂金額'; }
-        else if (sel.value !== '0') { price = parseFloat(sel.value) || 0; desc = sel.options[sel.selectedIndex].text; }
-        if (price > 0) { items.push([cat, name, 1, desc, price]); total += price; }
-      };
-      addSelectItem('large_board', 'large_board_custom', '石作工程', '大板');
-      addSelectItem('special_paint', 'special_paint_custom', '特殊漆工程', '特殊漆');
-      addSelectItem('ironwork', 'ironwork_custom', '鐵件工程', '鐵件');
-      addSelectItem('titanium_strips', 'titanium_strips_custom', '金屬工程', '鈦金條');
-
-      // 其他單價項目
-      const miscForExcel = [
-        { id: 'cleaning', name: '清潔 (全室含衛浴/陽台/廚房)', category: '其他單價項目', price: 1200, unit: '坪' },
-        { id: 'wood_flooring', name: '木地板 (不含衛浴/陽台/廚房)', category: '其他單價項目', price: 6500, unit: '坪' },
-        { id: 'protection', name: '室內保護', category: '其他單價項目', price: 1000, unit: '坪' }
-      ];
-      miscForExcel.forEach(item => {
-        const value = parseFloat(document.getElementById(item.id).value) || 0;
-        if (value > 0) {
-          const amt = value * item.price;
-          items.push([item.category, item.name, value, `${value}${item.unit} × ${item.price}`, amt]);
-          total += amt;
-        }
-      });
-
-      // 鋁框吊框 / 高門框
-      const othersForExcel = [
-        { id: 'aluminum_40x70', name: '鋁框吊框 40*70', category: '鋁框吊框', price: 2300, unit: '樘' },
-        { id: 'aluminum_45x70', name: '鋁框吊框 45*70', category: '鋁框吊框', price: 2600, unit: '樘' },
-        { id: 'aluminum_50x70', name: '鋁框吊框 50*70', category: '鋁框吊框', price: 3000, unit: '樘' },
-        { id: 'tall_frame_40x240', name: '高門框 40*240', category: '高門框', price: 7500, unit: '樘' },
-        { id: 'tall_frame_45x240', name: '高門框 45*240', category: '高門框', price: 8500, unit: '樘' },
-        { id: 'tall_frame_50x240', name: '高門框 50*240', category: '高門框', price: 9500, unit: '樘' }
-      ];
-      othersForExcel.forEach(item => {
-        const value = parseFloat(document.getElementById(item.id).value) || 0;
-        if (value > 0) {
-          const amt = value * item.price;
-          items.push([item.category, item.name, value, `${value}${item.unit} × ${item.price}`, amt]);
-          total += amt;
-        }
-      });
-
-      // 自動項目：木作五金 5%
-      const woodworkHardware = woodworkTotal * 0.05;
-      if (woodworkHardware > 0) { items.push(['自動項目', '木作五金', 1, '木作小計 × 5%', woodworkHardware]); total += woodworkHardware; }
-
-      // 自動項目：系統五金/運費/組裝（包含床架）
-      const systemHardware = systemTotal * 0.05;
-      const systemShipping = systemTotal * 0.05;
-      const systemAssembly = systemTotal * 0.20;
-      if (systemHardware > 0) { items.push(['自動項目', '系統五金', 1, '系統小計 × 5%', systemHardware]); total += systemHardware; }
-      if (systemShipping > 0) { items.push(['自動項目', '運費', 1, '系統小計 × 5%', systemShipping]); total += systemShipping; }
-      if (systemAssembly > 0) { items.push(['自動項目', '組裝費', 1, '系統小計 × 20%', systemAssembly]); total += systemAssembly; }
-
-      // 自動項目：其他項目 10%
-      const otherItemsAmount = total * 0.10;
-      if (otherItemsAmount > 0) { items.push(['自動項目', '其他項目(10%)', 1, '目前小計 × 10%', otherItemsAmount]); total += otherItemsAmount; }
-
-      // 自動項目：監工費 8%
-      const supervisionFee = total * 0.08;
-      if (supervisionFee > 0) { items.push(['自動項目', '監工費(8%)', 1, '目前小計 × 8%', supervisionFee]); total += supervisionFee; }
-
-      // 自動項目：稅額 5%
-      const tax = total * 0.05;
-      if (tax > 0) { items.push(['自動項目', '稅額(5%)', 1, '目前小計 × 5%', tax]); total += tax; }
-
-      const grandTotal = total;
-
-      // ===== 組 Excel =====
-      const grouped = {};
-      items.forEach(([cat, name, qty, desc, price]) => {
-        if (!grouped[cat]) grouped[cat] = [];
-        grouped[cat].push([name, qty, desc, price]);
-      });
-
-      const wsData = [];
-      wsData.push(["報價單"]);
-      wsData.push([]);
-      wsData.push(["=== 客戶資料 ==="]);
-      clientData.forEach(row => wsData.push(row));
-      wsData.push([]);
-
-      Object.keys(grouped).forEach(cat => {
-        wsData.push([cat]);
-        let sub = 0;
-        grouped[cat].forEach(([name, qty, desc, price]) => {
-          sub += price;
-          wsData.push(["", name, qty, desc, `NT$ ${price.toLocaleString()}`]);
-        });
-        wsData.push(["", "小計", "", "", `NT$ ${sub.toLocaleString()}`]);
-        wsData.push([]);
-      });
-
-      wsData.push(["總金額", "", "", "", `NT$ ${grandTotal.toLocaleString()}`]);
-
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-      //（注意：社群版 XLSX 對樣式支援有限，以下可能被忽略）
-      try {
-        const range = XLSX.utils.decode_range(ws['!ref']);
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-          const firstCell = ws[XLSX.utils.encode_cell({ r: R, c: 0 })];
-          if (firstCell && typeof firstCell.v === 'string') {
-            if (firstCell.v.includes("工程") || firstCell.v === "開關面板" || firstCell.v.includes("框") || firstCell.v.includes("項目") || firstCell.v === "床架" || firstCell.v === "自動項目") {
-              firstCell.s = { fill: { fgColor: { rgb: "DDDDDD" } }, font: { bold: true } };
-            }
-            if (firstCell.v === "總金額") {
-              firstCell.s = { fill: { fgColor: { rgb: "FFF2CC" } }, font: { bold: true } };
-            }
-          }
-        }
-      } catch(e) { /* 忽略樣式錯誤 */ }
-
-      XLSX.utils.book_append_sheet(wb, ws, "報價單");
-      XLSX.writeFile(wb, "室內裝修報價單.xlsx");
-    }
-
-    // 讓 HTML 中的 onclick/onchange 找得到這兩個函式
-    window.calculatePricing = calculatePricing;
-    window.exportToExcel = exportToExcel;
-  </script>
-  <script>
-// 將 "NT$ 1,234" 之類字串 -> 數字
-function _parseMoney(s){ return Number(String(s||'').replace(/[^\d.-]/g,'')) || 0; }
-
-// 收集整張表單的原始輸入（方便備查/還原）
-function _collectRawForm(){
-  const obj = {};
-  document.querySelectorAll('#quotationForm input, #quotationForm select').forEach(el=>{
-    if(!el.id) return;
-    if(el.type === 'checkbox') obj[el.id] = !!el.checked;
-    else obj[el.id] = el.value;
-  });
-  return obj;
-}
-
-async function saveQuote(){
-  try{
-    // 確保金額是最新
+  // ========= 初始化 =========
+  document.addEventListener('DOMContentLoaded', function () {
+    const today = new Date();
+    document.getElementById('date').value = today.toISOString().split('T')[0];
     calculatePricing();
+  });
 
-    // 主要欄位
-    const style = getStyleValue();        // 你原本已實作
-    const room  = getRoomTypeValue();     // 你原本已實作
-    const raw   = _collectRawForm();
+  // ========= UI 輔助 =========
+  function toggleCustomInput(fieldName) {
+    const select = document.getElementById(fieldName);
+    const customInput = document.getElementById(fieldName + '_custom');
 
-    // 直接從畫面抓三個自動欄位與總價（你的程式已經計算好）
-    const other10 = _parseMoney(document.getElementById('other_items').value);
-    const supervise8 = _parseMoney(document.getElementById('supervision_fee').value);
-    const tax5 = _parseMoney(document.getElementById('tax').value);
-    const grand = _parseMoney(document.getElementById('total-price').textContent);
+    if (select.value === '其他' || select.value === 'custom') {
+      customInput.classList.add('show');
+    } else {
+      customInput.classList.remove('show');
+      customInput.value = '';
+    }
+  }
 
-    const quote = {
-      quote_date: raw['date'] || null,
-      client_name: raw['client_name'] || null,
-      address: raw['address'] || null,
-      style: style || null,
-      room_type: room || null,
-      base_ping: parseFloat(raw['base_ping']) || null,
-      subtotal: Math.max(0, grand - other10 - supervise8 - tax5),  // 近似：扣掉三個加成
-      other_items: other10,
-      supervision_fee: supervise8,
-      tax: tax5,
-      grand_total: grand,
-      form: raw
+  function addBedFrame() {
+    bedFrameCount++;
+    const container = document.getElementById('bed-frames-container');
+    const bedFrameDiv = document.createElement('div');
+    bedFrameDiv.className = 'row mb-3 bed-frame-row';
+    bedFrameDiv.innerHTML = `
+      <div class="col-3">
+        <label class="form-label">床架 ${bedFrameCount}</label>
+        <button type="button" class="btn btn-outline-danger btn-sm d-block" onclick="removeBedFrame(this)">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+      <div class="col-3">
+        <label class="form-label">長(cm)</label>
+        <input type="number" class="form-control bed-frame-length" min="0" step="1" value="0" onchange="calculatePricing()">
+      </div>
+      <div class="col-3">
+        <label class="form-label">寬(cm)</label>
+        <input type="number" class="form-control bed-frame-width" min="0" step="1" value="0" onchange="calculatePricing()">
+      </div>
+      <div class="col-3">
+        <label class="form-label">金額</label>
+        <input type="text" class="form-control bed-frame-total auto-calc" readonly>
+      </div>
+    `;
+    container.appendChild(bedFrameDiv);
+    calculatePricing();
+  }
+
+  function removeBedFrame(button) {
+    button.closest('.bed-frame-row').remove();
+    calculatePricing();
+  }
+
+  function getStyleValue() {
+    const styleSelect = document.getElementById('style');
+    const customInput = document.getElementById('style_custom');
+    if (styleSelect.value === '其他' && customInput.value.trim()) return customInput.value.trim();
+    return styleSelect.value || '未選擇';
+  }
+
+  function getRoomTypeValue() {
+    const roomTypeSelect = document.getElementById('room_type');
+    const customInput = document.getElementById('room_type_custom');
+    if (roomTypeSelect.value === '其他' && customInput.value.trim()) return customInput.value.trim();
+    return roomTypeSelect.value || '未選擇';
+  }
+
+  // ========= 計算核心 =========
+  function calculatePricing() {
+    const totalEl = document.getElementById('total-price');
+    const boxEl   = document.getElementById('pricing-breakdown');
+    const basePing = parseFloat(document.getElementById('base_ping').value) || 0;
+
+    // 重置狀態
+    PRICING_STATE = { items: [], total: 0 };
+
+    const addLine = (category, name, qty, description, rawPrice) => {
+      const amt = R(rawPrice);
+      if (amt <= 0) return 0;
+      PRICING_STATE.items.push({ category, name, qty, description, amount: amt }); // description 只用於前端與 Excel
+      PRICING_STATE.total += amt;
+      return amt;
     };
 
-    // 先不送明細；之後要再加 quote_items 我們再擴充
-    const payload = { quote, items: [] };
-
-    const resp = await fetch('/api/save-quote', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-    const data = await resp.json();
-    if(!resp.ok){
-      throw new Error(data?.error || '儲存失敗');
+    if (basePing < 12) {
+      totalEl.textContent = money(0);
+      boxEl.innerHTML = '<p class="text-muted text-center">請先輸入基準坪數（至少 12 坪）</p>';
+      document.getElementById('woodwork_hardware').value = money(0);
+      document.getElementById('system_hardware').value  = money(0);
+      document.getElementById('system_shipping').value  = money(0);
+      document.getElementById('system_assembly').value  = money(0);
+      document.getElementById('other_items').value      = money(0);
+      document.getElementById('supervision_fee').value  = money(0);
+      document.getElementById('tax').value              = money(0);
+      return;
     }
-    alert('已儲存成功！編號：' + data.id);
-  }catch(err){
-    console.error(err);
-    alert('儲存失敗：' + (err.message || err));
+
+    // ---- 基礎工程
+    const baseProjects = [
+      { id: 'paint',      name: '油漆',  basePrice: 90000, basePing: 12, increment: 6000 },
+      { id: 'electrical', name: '水電',  basePrice: 60000, basePing: 12, increment: 5000 },
+      { id: 'lighting',   name: '燈具',  basePrice: 45000, basePing: 12, increment: 3000 },
+      { id: 'glass',      name: '玻璃',  basePrice: 25000, basePing: 12, increment: 3000 }
+    ];
+    baseProjects.forEach(p => {
+      if (document.getElementById(p.id).checked) {
+        const raw = p.basePrice + (basePing - p.basePing) * p.increment;
+        addLine('基礎工程', p.name, 1, `基數${p.basePrice}+(${basePing}-12)*${p.increment}`, raw);
+      }
+    });
+
+    // ---- 木作工程
+    const woodworkItems = [
+      { id: 'aircond_woodwork',   name: '冷氣+窗簾盒',    price: 1500, unit: '尺' },
+      { id: 'wall_panel',         name: '壁板',          price: 4500, unit: '尺' },
+      { id: 'low_screen_simple',  name: '矮屏(無造型)',   price: 2500, unit: '尺' },
+      { id: 'low_screen_curved',  name: '矮屏(有弧度)',   price: 3000, unit: '尺' },
+      { id: 'sliding_door_wood',  name: '拉門(含五金)',   price: 33000,unit: '樘' },
+      { id: 'room_door',          name: '房門(含五金)',   price: 33000,unit: '樘' },
+      { id: 'flat_ceiling',       name: '平釘天花板',     price: 6500, unit: '坪' },
+      { id: 'decorative_ceiling', name: '造型天花板',     price: 7000, unit: '坪' },
+      { id: 'partition_simple',   name: '隔間(無造型)',   price: 4000, unit: '尺' },
+      { id: 'partition_curved',   name: '隔間(有弧度)',   price: 5000, unit: '尺' },
+      { id: 'wall_ac_slot',       name: '壁掛冷氣凹槽',   price: 4500, unit: '空間' },
+      { id: 'ceiling_ac_slot',    name: '吊隱冷氣凹槽',   price: 8500, unit: '空間' }
+    ];
+    let woodworkTotal = 0;
+    woodworkItems.forEach(item => {
+      const v = parseFloat(document.getElementById(item.id).value) || 0;
+      if (v > 0) {
+        const raw = v * item.price;
+        woodworkTotal += addLine('木作工程', item.name, v, `${v}${item.unit} × ${item.price}`, raw) || 0;
+      }
+    });
+
+    // ---- 床架
+    let bedFramesSum = 0, idx = 1;
+    document.querySelectorAll('.bed-frame-row').forEach(row => {
+      const L = parseFloat(row.querySelector('.bed-frame-length').value) || 0;
+      const W = parseFloat(row.querySelector('.bed-frame-width').value)  || 0;
+      const amt = R(L * W);
+      row.querySelector('.bed-frame-total').value = amt.toLocaleString('zh-TW');
+      if (amt > 0) {
+        bedFramesSum += addLine('床架', `床架 ${idx++}`, 1, `${L}cm × ${W}cm × 1`, amt) || 0;
+      }
+    });
+
+    // ---- 系統櫃
+    const systemItems = [
+      { id: 'nightstand',               name: '床頭櫃',                     price: 6000, unit: '尺' },
+      { id: 'wall_cabinet_door',        name: '吊櫃(有門片)',               price: 5500, unit: '尺' },
+      { id: 'wall_cabinet_no_door',     name: '吊櫃(無門片)',               price: 5000, unit: '尺' },
+      { id: 'tall_cabinet_no_drawer',   name: '高櫃(含書櫃40-50cm無抽屜)',  price: 7500, unit: '尺' },
+      { id: 'tall_cabinet_with_drawer', name: '高櫃(含書櫃40-50cm有抽屜)',  price: 8000, unit: '尺' },
+      { id: 'wardrobe_door_60cm',       name: '衣櫃(門片含收納櫃60cm)',     price: 8500, unit: '尺' },
+      { id: 'wardrobe_slide_60cm',      name: '衣櫃(拉門含收納櫃60cm)',     price: 9000, unit: '尺' },
+      { id: 'appliance_cabinet',        name: '電器櫃',                     price: 8000, unit: '尺' },
+      { id: 'desk',                      name: '書桌',                      price: 6000, unit: '尺' },
+      { id: 'low_cabinet_no_drawer',    name: '矮櫃(無抽屜)',               price: 6000, unit: '尺' },
+      { id: 'low_cabinet_with_drawer',  name: '矮櫃(有抽屜)',               price: 7000, unit: '尺' },
+      { id: 'tv_cabinet',               name: '電視櫃',                     price: 4000, unit: '尺' },
+      { id: 'system_wall_panel',        name: '壁板',                       price: 3000, unit: '尺' }
+    ];
+    let systemTotal = 0;
+    systemItems.forEach(item => {
+      const v = parseFloat(document.getElementById(item.id).value) || 0;
+      if (v > 0) {
+        const raw = v * item.price;
+        systemTotal += addLine('系統櫃', item.name, v, `${v}${item.unit} × ${item.price}`, raw) || 0;
+      }
+    });
+    systemTotal += bedFramesSum;
+
+    // ---- 鐵件拉門
+    const ironSlidingDoor = parseFloat(document.getElementById('iron_sliding_door').value) || 0;
+    if (ironSlidingDoor > 0) addLine('鐵件拉門', '鐵件拉門(含五金)', ironSlidingDoor, `${ironSlidingDoor}樘 × 28000`, ironSlidingDoor * 28000);
+
+    // ---- 開關面板
+    let spPrice = 0, spDesc = '';
+    const sp = document.getElementById('switch_panel').value;
+    if (sp === 'starlight') { spPrice = 7000 + (basePing - 12) * 600; spDesc = `星光 - 基數7000+(${basePing}-12)*600`; }
+    else if (sp === 'risna') { spPrice = 9000 + (basePing - 12) * 700; spDesc = `Risna - 基數9000+(${basePing}-12)*700`; }
+    spPrice = R(spPrice);
+    document.getElementById('switch_panel_calc').value = money(spPrice);
+    addLine('開關面板', '開關面板', 1, spDesc, spPrice);
+
+    // ---- 特殊工程（下拉＋自訂）
+    const pick = (selId, customId) => {
+      const sel = document.getElementById(selId);
+      const cus = document.getElementById(customId);
+      if (!sel) return 0;
+      let v = 0;
+      if (sel.value === 'custom' && cus && cus.value) v = parseFloat(cus.value) || 0;
+      else v = parseFloat(sel.value) || 0;
+      return R(v);
+    };
+    const largeBoard   = pick('large_board',   'large_board_custom');
+    const specialPaint = pick('special_paint', 'special_paint_custom');
+    const ironwork     = pick('ironwork',      'ironwork_custom');
+    const titaniun     = pick('titanium_strips','titanium_strips_custom');
+
+    if (largeBoard   > 0) addLine('石作工程', '大板',   1, '選項', largeBoard);
+    if (specialPaint > 0) addLine('特殊漆工程', '特殊漆', 1, '選項', specialPaint);
+    if (ironwork     > 0) addLine('鐵件工程', '鐵件',   1, '選項', ironwork);
+    if (titaniun     > 0) addLine('金屬工程', '鈦金條', 1, '選項', titaniun);
+
+    // ---- 其他單價項目
+    const misc = [
+      { id: 'cleaning',      name: '清潔 (全室含衛浴/陽台/廚房)', price: 1200, unit: '坪' },
+      { id: 'wood_flooring', name: '木地板 (不含衛浴/陽台/廚房)', price: 6500, unit: '坪' },
+      { id: 'protection',    name: '室內保護',                   price: 1000, unit: '坪' }
+    ];
+    misc.forEach(i => {
+      const v = parseFloat(document.getElementById(i.id).value) || 0;
+      if (v > 0) addLine('其他單價項目', i.name, v, `${v}${i.unit} × ${i.price}`, v * i.price);
+    });
+
+    // ---- 鋁框 / 高門框
+    const others = [
+      { id: 'aluminum_40x70',   name: '鋁框吊框 40*70', price: 2300, unit: '樘' },
+      { id: 'aluminum_45x70',   name: '鋁框吊框 45*70', price: 2600, unit: '樘' },
+      { id: 'aluminum_50x70',   name: '鋁框吊框 50*70', price: 3000, unit: '樘' },
+      { id: 'tall_frame_40x240',name: '高門框 40*240',  price: 7500, unit: '樘' },
+      { id: 'tall_frame_45x240',name: '高門框 45*240',  price: 8500, unit: '樘' },
+      { id: 'tall_frame_50x240',name: '高門框 50*240',  price: 9500, unit: '樘' }
+    ];
+    others.forEach(i => {
+      const v = parseFloat(document.getElementById(i.id).value) || 0;
+      if (v > 0) addLine(i.name.includes('鋁框吊框') ? '鋁框吊框' : '高門框', i.name, v, `${v}${i.unit} × ${i.price}`, v * i.price);
+    });
+
+    // ---- 自動項目（依目前小計/逐步累加）
+    const woodworkHardware = R(woodworkTotal * 0.05);
+    document.getElementById('woodwork_hardware').value = money(woodworkHardware);
+    addLine('自動項目', '木作五金', 1, '木作小計 × 5%', woodworkHardware);
+
+    const sysHardware = R(systemTotal * 0.05);
+    const sysShipping = R(systemTotal * 0.05);
+    const sysAssembly = R(systemTotal * 0.20);
+    document.getElementById('system_hardware').value = money(sysHardware);
+    document.getElementById('system_shipping').value = money(sysShipping);
+    document.getElementById('system_assembly').value = money(sysAssembly);
+    addLine('自動項目', '系統五金', 1, '系統小計 × 5%',  sysHardware);
+    addLine('自動項目', '運費',     1, '系統小計 × 5%',  sysShipping);
+    addLine('自動項目', '組裝費',   1, '系統小計 × 20%', sysAssembly);
+
+    const other10 = R(PRICING_STATE.total * 0.10);
+    document.getElementById('other_items').value = money(other10);
+    addLine('自動項目', '其他項目(10%)', 1, '目前小計 × 10%', other10);
+
+    const supervision = R(PRICING_STATE.total * 0.08);
+    document.getElementById('supervision_fee').value = money(supervision);
+    addLine('自動項目', '監工費(8%)', 1, '目前小計 × 8%', supervision);
+
+    const tax = R(PRICING_STATE.total * 0.05);
+    document.getElementById('tax').value = money(tax);
+    addLine('自動項目', '稅額(5%)', 1, '目前小計 × 5%', tax);
+
+    // ---- 更新畫面
+    totalEl.textContent = money(PRICING_STATE.total);
+    const html = PRICING_STATE.items.length === 0
+      ? '<p class="text-muted text-center">請選擇項目來查看明細</p>'
+      : PRICING_STATE.items.map(it => `
+          <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+            <span class="fw-medium">${it.category} - ${it.name}</span>
+            <span class="text-primary fw-bold">${money(it.amount)}</span>
+          </div>`).join('');
+    boxEl.innerHTML = html;
   }
-}
+
+  // ========= 匯出 Excel =========
+  function exportToExcel() {
+    // 確保有最新計算
+    calculatePricing();
+
+    // 客戶資料
+    const clientData = [
+      ["客戶名稱", document.getElementById('client_name').value || '未填寫'],
+      ["報價日期", document.getElementById('date').value || '未填寫'],
+      ["地址", document.getElementById('address').value || '未填寫'],
+      ["風格", getStyleValue()],
+      ["房型", getRoomTypeValue()],
+      ["基準坪數", document.getElementById('base_ping').value || '0']
+    ];
+
+    // 依類別分組
+    const grouped = {};
+    PRICING_STATE.items.forEach(it => {
+      if (!grouped[it.category]) grouped[it.category] = [];
+      grouped[it.category].push(it);
+    });
+
+    const wsData = [];
+    wsData.push(["報價單"]); wsData.push([]);
+    wsData.push(["=== 客戶資料 ==="]);
+    clientData.forEach(row => wsData.push(row));
+    wsData.push([]);
+
+    Object.keys(grouped).forEach(cat => {
+      wsData.push([cat]);
+      let sub = 0;
+      grouped[cat].forEach(it => {
+        sub += it.amount;
+        wsData.push(["", it.name, it.qty, it.description, `NT$ ${it.amount.toLocaleString()}`]);
+      });
+      wsData.push(["", "小計", "", "", `NT$ ${sub.toLocaleString()}`]);
+      wsData.push([]);
+    });
+
+    wsData.push(["總金額", "", "", "", `NT$ ${PRICING_STATE.total.toLocaleString()}`]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    try {
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        const firstCell = ws[XLSX.utils.encode_cell({ r: R, c: 0 })];
+        if (firstCell && typeof firstCell.v === 'string') {
+          if (firstCell.v.includes("工程") || firstCell.v === "開關面板" || firstCell.v.includes("框") || firstCell.v.includes("項目") || firstCell.v === "床架" || firstCell.v === "自動項目") {
+            firstCell.s = { fill: { fgColor: { rgb: "DDDDDD" } }, font: { bold: true } };
+          }
+          if (firstCell.v === "總金額") {
+            firstCell.s = { fill: { fgColor: { rgb: "FFF2CC" } }, font: { bold: true } };
+          }
+        }
+      }
+    } catch(e) { /* 忽略樣式支援度差異 */ }
+
+    XLSX.utils.book_append_sheet(wb, ws, "報價單");
+    XLSX.writeFile(wb, "室內裝修報價單.xlsx");
+  }
+
+  // ========= 儲存 =========
+  function _collectRawForm(){
+    const obj = {};
+    document.querySelectorAll('#quotationForm input, #quotationForm select').forEach(el=>{
+      if(!el.id) return;
+      if(el.type === 'checkbox') obj[el.id] = !!el.checked;
+      else obj[el.id] = el.value;
+    });
+    return obj;
+  }
+
+  // 以雙路徑送出（先 application/json，失敗再 text/plain）
+  async function _postPayload(url, payload){
+    const bodyText = JSON.stringify(payload);
+    const tryOnce = async (ctype) => {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': ctype, 'Accept': 'application/json' },
+        body: bodyText
+      });
+      const text = await resp.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { /* 不是 JSON 就略過 */ }
+      return { resp, text, data };
+    };
+
+    let r = await tryOnce('application/json');
+
+    // 若後端拋出 Unexpected end 或 5xx，再以 text/plain 重送一次（給用 JSON.parse(req.body) 的實作吃）
+    if (!r.resp.ok && ((r.text || '').includes('Unexpected end of JSON input') || r.resp.status >= 500)) {
+      r = await tryOnce('text/plain');
+    }
+
+    if (!r.resp.ok) {
+      const msg = (r.data && (r.data.error || r.data.message)) || r.text || `HTTP ${r.resp.status}`;
+      throw new Error(msg);
+    }
+    return r.data || { ok: true };
+  }
+
+  async function saveQuote(){
+    const btn = document.querySelector('button[onclick="saveQuote()"]');
+    try{
+      if (btn) { btn.disabled = true; btn.textContent = '儲存中…'; }
+
+      // 最新計算＋基本檢查
+      calculatePricing();
+      _validateBeforeSave();
+
+      // 收集表單
+      const raw   = _collectRawForm();
+      const style = getStyleValue();
+      const room  = getRoomTypeValue();
+
+      // 金額全部正規化為整數
+      const other10    = _toInt(_parseMoney(document.getElementById('other_items').value));
+      const supervise8 = _toInt(_parseMoney(document.getElementById('supervision_fee').value));
+      const tax5       = _toInt(_parseMoney(document.getElementById('tax').value));
+      const grand      = _toInt(_parseMoney(document.getElementById('total-price').textContent));
+
+      // 僅送後端有的欄位（不要送 description/desc）
+const sanitizedItems = (PRICING_STATE.items || []).map(it => ({
+  category: String(it.category || ''),
+  name:     String(it.name || ''),
+  qty:      Number(it.qty || 0),
+  amount:   _toInt(it.amount || 0),
+  description: it.description ?? null
+}));
+
+
+      // payload
+const quote = {
+  quote_date: raw['date'] || null, // YYYY-MM-DD
+  client_name: raw['client_name'] || null,
+  address: raw['address'] || null,
+  style: style || null,
+  room_type: room || null,
+  base_ping: Number(raw['base_ping']) || null,
+  subtotal: Math.max(0, grand - other10 - supervise8 - tax5),
+  other_items: other10,
+  supervision_fee: supervise8,
+  tax: tax5,
+  grand_total: grand,
+  form: raw
+};
+
+
+      const payload = { quote, items: sanitizedItems };
+
+      // 送出（內含 fallback）
+      const data = await _postPayload(API_URL, payload);
+
+      alert('已儲存成功！編號：' + (data?.id || data?.insertedId || '—'));
+    }catch(err){
+      console.error('SAVE_QUOTE_ERROR:', err);
+      alert('儲存失敗：' + (err.message || err));
+    }finally{
+      if (btn) { btn.disabled = false; btn.textContent = '儲存到資料庫'; }
+    }
+  }
+
+  // ========= 讓 HTML onclick 找得到 =========
+  window.calculatePricing = calculatePricing;
+  window.exportToExcel   = exportToExcel;
+  window.saveQuote       = saveQuote;
+  window.addBedFrame     = addBedFrame;
+  window.removeBedFrame  = removeBedFrame;
+  window.getStyleValue   = getStyleValue;
+  window.getRoomTypeValue= getRoomTypeValue;
 </script>
 </body>
 </html>

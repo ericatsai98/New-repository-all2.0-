@@ -1,19 +1,202 @@
-<script>
-  // --- 狀態與小工具 ---
-  const state = { page: 1, limit: 20, lastResp: null, lastQuery: {} };
-  function nt(n){ return (n ?? 0).toLocaleString('zh-TW', {maximumFractionDigits: 0}); }
-  function fmtMoney(n){ return 'NT$ ' + nt(Math.round(Number(n)||0)); }
-  function fmtDate(s){ return s ? String(s).slice(0,10) : ''; }
+<!DOCTYPE html>
+<html lang="zh-TW" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>歷史報價查詢</title>
+  <meta name="robots" content="noindex,nofollow"/>
 
-  // 收集查詢條件
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/darkly/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    .card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,.075); }
+    .table td, .table th { vertical-align: middle; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="mb-0"><i class="fa-solid fa-magnifying-glass me-2"></i>歷史報價查詢</h2>
+    <div>
+      <a href="./index.html" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-arrow-left me-1"></i>返回報價</a>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <form id="filterForm" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">風格</label>
+          <select id="style" class="form-select">
+            <option value="">全部</option>
+            <option>簡約</option><option>北歐</option><option>清奢</option>
+            <option>古典</option><option>美式</option><option>現代</option>
+            <option>日式</option><option>無印</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">房型</label>
+          <select id="room_type" class="form-select">
+            <option value="">全部</option>
+            <option>一房一廳一衛</option>
+            <option>兩房一廳一衛</option>
+            <option>兩房兩廳兩衛</option>
+            <option>三房一廳一衛</option>
+            <option>三房兩廳兩衛</option>
+            <option>三房兩廳三衛</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">坪數（最小）</label>
+          <input id="ping_min" type="number" class="form-control" min="0" step="0.1" placeholder="例如 18"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">坪數（最大）</label>
+          <input id="ping_max" type="number" class="form-control" min="0" step="0.1" placeholder="例如 28"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">日期（起）</label>
+          <input id="from" type="date" class="form-control"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">日期（迄）</label>
+          <input id="to" type="date" class="form-control"/>
+        </div>
+        <div class="col-md-6 d-flex align-items-end justify-content-end">
+          <div class="btn-group">
+            <button type="button" class="btn btn-primary" id="btnSearch"><i class="fa-solid fa-search me-1"></i>查詢</button>
+            <button type="button" class="btn btn-secondary" id="btnReset"><i class="fa-solid fa-rotate-left me-1"></i>重設</button>
+            <button type="button" class="btn btn-success" id="btnExport"><i class="fa-solid fa-file-excel me-1"></i>匯出 Excel</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div id="summary" class="text-muted">共 0 筆</div>
+    <div class="btn-group">
+      <button id="prev" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-angle-left"></i></button>
+      <button id="next" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-angle-right"></i></button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>日期</th>
+            <th>客戶</th>
+            <th>風格</th>
+            <th>房型</th>
+            <th class="text-end">坪數</th>
+            <th class="text-end">總價</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="7" class="text-center text-muted py-4">尚無資料</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 詳情 Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">報價詳情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-base" type="button" role="tab">基本資料</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-items" type="button" role="tab">明細</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-form" type="button" role="tab">原始表單 JSON</button>
+          </li>
+        </ul>
+
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="tab-base" role="tabpanel">
+            <div id="detailBase" class="row g-3"></div>
+          </div>
+
+          <div class="tab-pane fade" id="tab-items" role="tabpanel">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead class="table-dark">
+                  <tr>
+                    <th>分類</th>
+                    <th>項目</th>
+                    <th class="text-end">數量</th>
+                    <th>說明</th>
+                    <th class="text-end">金額</th>
+                  </tr>
+                </thead>
+                <tbody id="detailItemsBody">
+                  <tr><td colspan="5" class="text-muted text-center">無明細</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th colspan="4" class="text-end">小計</th>
+                    <th class="text-end" id="itemsSubtotal">NT$ 0</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div class="tab-pane fade" id="tab-form" role="tabpanel">
+            <pre id="detailForm" class="mb-0" style="white-space:pre-wrap;"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const state = { page: 1, limit: 20, lastResp: null, lastQuery: {} };
+  const $ = (s) => document.querySelector(s);
+  const nt = (n)=> (n ?? 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+  const fmtMoney = (n)=> 'NT$ ' + nt(Math.round(Number(n)||0));
+  const fmtDate = (s)=> s ? String(s).slice(0,10) : '';
+
+  async function apiGetJson(url, init = {}) {
+    let resp = await fetch(url, { cache: 'no-store', ...init });
+    if (resp.status === 401) resp = await fetch(url, { cache: 'no-store', ...init });
+    const text = await resp.text();
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} ${text || ''}`);
+    try { return JSON.parse(text); } catch { return text; }
+  }
+
+  function setLoading(msg = '讀取中…') {
+    $('#tbody').innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">${msg}</td></tr>`;
+    $('#summary').textContent = '';
+    $('#prev').disabled = true;
+    $('#next').disabled = true;
+  }
+
   function collectQuery(){
     const q = {
-      style: document.getElementById('style').value.trim(),
-      room_type: document.getElementById('room_type').value.trim(),
-      ping_min: document.getElementById('ping_min').value.trim(),
-      ping_max: document.getElementById('ping_max').value.trim(),
-      from: document.getElementById('from').value.trim(),
-      to: document.getElementById('to').value.trim(),
+      style: $('#style').value.trim(),
+      room_type: $('#room_type').value.trim(),
+      ping_min: $('#ping_min').value.trim(),
+      ping_max: $('#ping_max').value.trim(),
+      from: $('#from').value.trim(),
+      to: $('#to').value.trim(),
       page: state.page,
       limit: state.limit
     };
@@ -21,35 +204,30 @@
     return q;
   }
 
-  // 打 API 搜尋
-  async function search(page=1){
+  async function search(page = 1){
     state.page = page;
-    const q = state.lastQuery = collectQuery();
-    const sp = new URLSearchParams(q);
-    let data = null;
-
+    setLoading();
     try{
-      const resp = await fetch('/api/search-quotes?' + sp.toString());
-      data = await resp.json();
-      if(!resp.ok) throw new Error(data?.error || ('HTTP ' + resp.status));
+      const q = state.lastQuery = collectQuery();
+      const sp = new URLSearchParams(q);
+      const data = await apiGetJson('/api/search-quotes?' + sp.toString());
       state.lastResp = data;
       render(data);
     }catch(err){
       console.error(err);
-      document.getElementById('tbody').innerHTML =
-        `<tr><td colspan="7" class="text-center text-danger py-4">查詢失敗：${(data && data.error) || err.message || err}</td></tr>`;
-      document.getElementById('summary').textContent = '共 0 筆';
+      $('#tbody').innerHTML =
+        `<tr><td colspan="7" class="text-center text-danger py-4">查詢失敗：${err.message || err}</td></tr>`;
+      $('#summary').textContent = '共 0 筆';
     }
   }
 
-  // 渲染表格
   function render(resp){
-    const tbody = document.getElementById('tbody');
+    const tbody = $('#tbody');
     if(!resp || !Array.isArray(resp.items) || resp.items.length === 0){
       tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">沒有符合條件的資料</td></tr>';
-      document.getElementById('summary').textContent = '共 0 筆';
-      document.getElementById('prev').disabled = true;
-      document.getElementById('next').disabled = true;
+      $('#summary').textContent = '共 0 筆';
+      $('#prev').disabled = true;
+      $('#next').disabled = true;
       return;
     }
 
@@ -66,19 +244,18 @@
             <i class="fa-solid fa-eye me-1"></i>查看
           </button>
         </td>
-      </tr>
-    `).join('');
+      </tr>`
+    ).join('');
 
     const totalTxt = (resp.total != null)
       ? `共 ${resp.total.toLocaleString()} 筆，頁 ${resp.page}`
       : `頁 ${resp.page}`;
-    document.getElementById('summary').textContent = totalTxt;
+    $('#summary').textContent = totalTxt;
 
-    document.getElementById('prev').disabled = (resp.page <= 1);
-    document.getElementById('next').disabled = (resp.hasNext === false);
+    $('#prev').disabled = (resp.page <= 1);
+    $('#next').disabled = (resp.hasNext === false);
   }
 
-  // 匯出目前頁面結果為 Excel
   function exportExcel(){
     const items = state?.lastResp?.items || [];
     if(items.length === 0){ alert('沒有可匯出的資料'); return; }
@@ -101,14 +278,10 @@
     XLSX.writeFile(wb, `歷史報價_${ts}.xlsx`);
   }
 
-  // 單筆詳情（含 quote_items 與 form）
   async function showDetail(id){
     try{
-      const resp = await fetch('/api/quote-detail?id=' + encodeURIComponent(id));
-      const row = await resp.json();
-      if(!resp.ok) throw new Error(row?.error || '取得詳情失敗');
+      const row = await apiGetJson('/api/quote-detail?id=' + encodeURIComponent(id));
 
-      // 基本資料
       const base = [
         { label:'日期', value: fmtDate(row.quote_date || row.created_at) },
         { label:'客戶', value: row.client_name || '' },
@@ -123,7 +296,7 @@
         { label:'總價', value: fmtMoney(row.grand_total) },
         { label:'編號', value: row.id }
       ];
-      document.getElementById('detailBase').innerHTML = base.map(b => `
+      $('#detailBase').innerHTML = base.map(b => `
         <div class="col-md-4">
           <div class="p-2 border rounded">
             <div class="text-muted small">${b.label}</div>
@@ -131,51 +304,48 @@
           </div>
         </div>`).join('');
 
-      // 明細
       const items = Array.isArray(row.quote_items) ? row.quote_items : [];
       if(items.length === 0){
-        document.getElementById('detailItemsBody').innerHTML =
-          '<tr><td colspan="6" class="text-muted text-center">無明細</td></tr>';
-        document.getElementById('itemsSubtotal').textContent = 'NT$ 0';
+        $('#detailItemsBody').innerHTML =
+          '<tr><td colspan="5" class="text-muted text-center">無明細</td></tr>';
+        $('#itemsSubtotal').textContent = 'NT$ 0';
       }else{
         let sub = 0;
-        document.getElementById('detailItemsBody').innerHTML = items.map(it=>{
+        $('#detailItemsBody').innerHTML = items.map(it=>{
           sub += Number(it.amount)||0;
           return `
             <tr>
               <td>${it.category ?? ''}</td>
               <td>${it.name ?? ''}</td>
               <td class="text-end">${it.qty ?? ''}</td>
-              <td>${it.unit ?? ''}</td>
-              <td class="text-end">${fmtMoney(it.unit_price)}</td>
+              <td>${it.description ?? ''}</td>
               <td class="text-end">${fmtMoney(it.amount)}</td>
             </tr>`;
         }).join('');
-        document.getElementById('itemsSubtotal').textContent = fmtMoney(sub);
+        $('#itemsSubtotal').textContent = fmtMoney(sub);
       }
 
-      // 原始表單 JSON
-      document.getElementById('detailForm').textContent =
-        JSON.stringify(row.form || {}, null, 2);
+      $('#detailForm').textContent = JSON.stringify(row.form || {}, null, 2);
 
-      new bootstrap.Modal(document.getElementById('detailModal')).show();
+      new bootstrap.Modal($('#detailModal')).show();
     }catch(err){
       console.error(err);
       alert(err.message || err);
     }
   }
 
-  // 事件與初始化
-  document.getElementById('btnSearch').addEventListener('click', ()=>search(1));
-  document.getElementById('btnReset').addEventListener('click', ()=>{
-    document.getElementById('filterForm').reset();
-    state.page = 1;
+  document.addEventListener('DOMContentLoaded', () => {
+    $('#btnSearch').addEventListener('click', ()=>search(1));
+    $('#btnReset').addEventListener('click', ()=>{
+      $('#filterForm').reset();
+      state.page = 1;
+      search(1);
+    });
+    $('#btnExport').addEventListener('click', exportExcel);
+    $('#prev').addEventListener('click', ()=> search(Math.max(1, state.page-1)));
+    $('#next').addEventListener('click', ()=> search(state.page+1));
     search(1);
   });
-  document.getElementById('btnExport').addEventListener('click', exportExcel);
-  document.getElementById('prev').addEventListener('click', ()=> search(Math.max(1, state.page-1)));
-  document.getElementById('next').addEventListener('click', ()=> search(state.page+1));
-
-  // 頁面載入就查一次
-  search(1);
 </script>
+</body>
+</html>
