@@ -1,5 +1,5 @@
 {
-  "name": "renovation-quotes",
+  "name": "new-repository-all2.0-",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -7,8 +7,9 @@
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "next": "14.2.5",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   }
 }
