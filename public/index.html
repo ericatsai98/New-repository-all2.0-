@@ -136,7 +136,7 @@
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="paint" onchange="calculatePricing()" checked>
                     <label class="form-check-label fw-bold" for="paint">油漆</label>
-                    <div><small class="text-muted">基礎價格：90,000元 (12坪)，每坪增額：6,000元</small></div>
+                    <div><small class="text-muted">基礎價格：90,000元 (12坪)，每坪增額：7,500元</small></div>
                   </div>
                 </div>
                 <div class="col-md-6 mb-3">
@@ -153,12 +153,22 @@
                     <div><small class="text-muted">基礎價格：45,000元 (12坪)，每坪增額：3,000元</small></div>
                   </div>
                 </div>
+
+                <!-- 玻璃：改為下拉 -->
                 <div class="col-md-6 mb-3">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="glass" onchange="calculatePricing()" checked>
-                    <label class="form-check-label fw-bold" for="glass">玻璃</label>
-                    <div><small class="text-muted">基礎價格：25,000元 (12坪)，每坪增額：3,000元</small></div>
-                  </div>
+                  <label for="glass_sel" class="form-label">玻璃</label>
+                  <select class="form-select" id="glass_sel" onchange="toggleCustomInput('glass_sel'); calculatePricing()">
+                    <option value="0">不選擇</option>
+                    <option value="15000">15,000</option>
+                    <option value="20000">20,000</option>
+                    <option value="25000">25,000</option>
+                    <option value="30000">30,000</option>
+                    <option value="35000">35,000</option>
+                    <option value="40000">40,000</option>
+                    <option value="45000">45,000</option>
+                    <option value="custom">自行輸入金額</option>
+                  </select>
+                  <input type="number" class="form-control mt-2 custom-input" id="glass_sel_custom" placeholder="請輸入金額" onchange="calculatePricing()">
                 </div>
               </div>
             </div>
@@ -178,6 +188,23 @@
                     <span class="input-group-text">尺 × 1,500</span>
                   </div>
                 </div>
+
+                <!-- 冷氣出風口：下拉 + 口數 -->
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">冷氣出風口</label>
+                  <div class="input-group">
+                    <select class="form-select" id="ac_outlet" onchange="toggleCustomInput('ac_outlet'); calculatePricing()">
+                      <option value="0">不選擇</option>
+                      <option value="3000">3,000 /口</option>
+                      <option value="4000">4,000 /口</option>
+                      <option value="5000">5,000 /口</option>
+                      <option value="custom">自行輸入金額</option>
+                    </select>
+                    <input type="number" class="form-control" id="ac_outlet_qty" min="0" value="0" placeholder="口數" onchange="calculatePricing()">
+                  </div>
+                  <input type="number" class="form-control mt-2 custom-input" id="ac_outlet_custom" placeholder="自訂金額（每口）" onchange="calculatePricing()">
+                </div>
+
                 <div class="col-md-6 mb-3">
                   <label for="wall_panel" class="form-label">壁板</label>
                   <div class="input-group">
@@ -242,6 +269,16 @@
                     <span class="input-group-text">尺 × 5,000</span>
                   </div>
                 </div>
+
+                <!-- 吊隱維修口 -->
+                <div class="col-md-6 mb-3">
+                  <label for="concealed_service_hatch" class="form-label">吊隱維修口</label>
+                  <div class="input-group">
+                    <input type="number" class="form-control" id="concealed_service_hatch" min="0" value="0" onchange="calculatePricing()">
+                    <span class="input-group-text">口 × 4,500</span>
+                  </div>
+                </div>
+
                 <div class="col-md-6 mb-3">
                   <label for="wall_ac_slot" class="form-label">壁掛冷氣凹槽</label>
                   <div class="input-group">
@@ -256,6 +293,7 @@
                     <span class="input-group-text">空間 × 8,500</span>
                   </div>
                 </div>
+
                 <div class="col-12 mb-3">
                   <label for="woodwork_hardware" class="form-label">木作五金 (自動計算 - 木作總金額 × 5%)</label>
                   <input type="text" class="form-control auto-calc" id="woodwork_hardware" readonly>
@@ -376,6 +414,22 @@
                   <div class="input-group">
                     <input type="number" class="form-control" id="system_wall_panel" min="0" step="0.1" value="0" onchange="calculatePricing()">
                     <span class="input-group-text">尺 × 3,000</span>
+                  </div>
+                </div>
+
+                <!-- 弧形隔屏 -->
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">弧形隔屏</label>
+                  <div class="input-group">
+                    <select class="form-select" id="curved_partition" onchange="calculatePricing()">
+                      <option value="0">不選擇</option>
+                      <option value="5000">45cm - 5,000</option>
+                      <option value="6000">50cm - 6,000</option>
+                      <option value="8000">60cm - 8,000</option>
+                      <option value="12000">雙邊 - 12,000</option>
+                    </select>
+                    <input type="number" class="form-control" id="curved_partition_qty" min="0" value="0" placeholder="組數" onchange="calculatePricing()">
+                    <span class="input-group-text">/組</span>
                   </div>
                 </div>
 
@@ -616,19 +670,58 @@
                     <span class="input-group-text">坪 × 1,000</span>
                   </div>
                 </div>
+
+                <!-- 清運 / 拆除 -->
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">清運</label>
+                  <select class="form-select" id="haulage" onchange="toggleCustomInput('haulage'); calculatePricing()">
+                    <option value="0">不選擇</option>
+                    <option value="10000">10,000</option>
+                    <option value="12000">12,000</option>
+                    <option value="15000">15,000</option>
+                    <option value="18000">18,000</option>
+                    <option value="custom">自行輸入金額</option>
+                  </select>
+                  <input type="number" class="form-control mt-2 custom-input" id="haulage_custom" placeholder="請輸入金額" onchange="calculatePricing()">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">拆除</label>
+                  <select class="form-select" id="demolition" onchange="toggleCustomInput('demolition'); calculatePricing()">
+                    <option value="0">不選擇</option>
+                    <option value="6000">6,000</option>
+                    <option value="8000">8,000</option>
+                    <option value="10000">10,000</option>
+                    <option value="12000">12,000</option>
+                    <option value="custom">自行輸入金額</option>
+                  </select>
+                  <input type="number" class="form-control mt-2 custom-input" id="demolition_custom" placeholder="請輸入金額" onchange="calculatePricing()">
+                </div>
               </div>
+            </div>
+          </div>
+
+          <!-- 其他（自訂）項目 -->
+          <div class="card mb-4">
+            <div class="card-header">
+              <h5 class="card-title mb-0"><i class="fas fa-pen me-2"></i>其他（自訂）項目</h5>
+            </div>
+            <div class="card-body">
+              <div id="custom-items-container"></div>
+              <button type="button" class="btn btn-outline-primary btn-sm" onclick="addCustomItem()">
+                <i class="fas fa-plus me-1"></i>新增自訂項目
+              </button>
             </div>
           </div>
 
           <!-- 其他項目（尚未計算的項目） -->
           <div class="card mb-4">
             <div class="card-header">
-              <h5 class="card-title mb-0"><i class="fas fa-plus me-2"></i>其他項目 (尚未計算的項目)</h5>
+              <h5 class="card-title mb-0"><i class="fas fa-plus me-2"></i>其他項目 (自動計算 - 總金額 × 3%)</h5>
             </div>
             <div class="card-body">
               <div class="row">
                 <div class="col-12 mb-3">
-                  <label for="other_items" class="form-label">其他項目 (自動計算 - 總金額 × 10%)</label>
+                  <label for="other_items" class="form-label">其他項目 (自動計算 - 總金額 × 3%)</label>
                   <input type="text" class="form-control auto-calc" id="other_items" readonly>
                 </div>
               </div>
@@ -704,18 +797,15 @@
     </div>
   </div>
 
-  <!-- 單一、乾淨的腳本區 -->
 <script>
   // ========= 共用工具 =========
   const R = (n) => Math.round(Number(n) || 0);
   const money = (n) => 'NT$ ' + R(n).toLocaleString('zh-TW');
   const _parseMoney = (s) => Number(String(s||'').replace(/[^\d.-]/g,'')) || 0;
 
-  // 如果 API 跑在別的網域，請把這行改成絕對網址，例如：
-  // const API_URL = 'https://你的專案域名.vercel.app/api/save-quote';
+  // API 路徑
   const API_URL = '/api/save-quote';
 
-  // 讓金額都用整數，並在儲存前做基本檢查
   const _toInt = (n) => Math.round(Number(n) || 0);
   function _validateBeforeSave() {
     const basePing = parseFloat(document.getElementById('base_ping').value) || 0;
@@ -725,8 +815,9 @@
     }
   }
 
-  // ========= 狀態（給 Excel/儲存共用）=========
+  // ========= 狀態 =========
   let bedFrameCount = 0;
+  let customItemCount = 0;
   let PRICING_STATE = { items: [], total: 0 };
 
   // ========= 初始化 =========
@@ -740,12 +831,11 @@
   function toggleCustomInput(fieldName) {
     const select = document.getElementById(fieldName);
     const customInput = document.getElementById(fieldName + '_custom');
-
+    if (!select) return;
     if (select.value === '其他' || select.value === 'custom') {
-      customInput.classList.add('show');
+      if (customInput) customInput.classList.add('show');
     } else {
-      customInput.classList.remove('show');
-      customInput.value = '';
+      if (customInput) { customInput.classList.remove('show'); customInput.value = ''; }
     }
   }
 
@@ -777,9 +867,45 @@
     container.appendChild(bedFrameDiv);
     calculatePricing();
   }
-
   function removeBedFrame(button) {
     button.closest('.bed-frame-row').remove();
+    calculatePricing();
+  }
+
+  function addCustomItem() {
+    customItemCount++;
+    const c = document.getElementById('custom-items-container');
+    const row = document.createElement('div');
+    row.className = 'row g-2 align-items-end mb-3 custom-item-row';
+    row.innerHTML = `
+      <div class="col-md-3">
+        <label class="form-label">項目名稱</label>
+        <input type="text" class="form-control ci-name" placeholder="例如：搬運費" onchange="calculatePricing()">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">單價</label>
+        <input type="number" class="form-control ci-price" min="0" step="1" value="0" onchange="calculatePricing()">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">數量</label>
+        <input type="number" class="form-control ci-qty" min="0" step="0.1" value="0" onchange="calculatePricing()">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">單位</label>
+        <input type="text" class="form-control ci-unit" placeholder="如：組 / 次 / 口" onchange="calculatePricing()">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">金額</label>
+        <input type="text" class="form-control ci-total auto-calc" readonly>
+      </div>
+      <div class="col-md-1">
+        <button type="button" class="btn btn-outline-danger" onclick="removeCustomItem(this)"><i class="fas fa-trash"></i></button>
+      </div>
+    `;
+    c.appendChild(row);
+  }
+  function removeCustomItem(btn) {
+    btn.closest('.custom-item-row').remove();
     calculatePricing();
   }
 
@@ -789,7 +915,6 @@
     if (styleSelect.value === '其他' && customInput.value.trim()) return customInput.value.trim();
     return styleSelect.value || '未選擇';
   }
-
   function getRoomTypeValue() {
     const roomTypeSelect = document.getElementById('room_type');
     const customInput = document.getElementById('room_type_custom');
@@ -803,13 +928,12 @@
     const boxEl   = document.getElementById('pricing-breakdown');
     const basePing = parseFloat(document.getElementById('base_ping').value) || 0;
 
-    // 重置狀態
     PRICING_STATE = { items: [], total: 0 };
 
     const addLine = (category, name, qty, description, rawPrice) => {
       const amt = R(rawPrice);
       if (amt <= 0) return 0;
-      PRICING_STATE.items.push({ category, name, qty, description, amount: amt }); // description 只用於前端與 Excel
+      PRICING_STATE.items.push({ category, name, qty, description, amount: amt });
       PRICING_STATE.total += amt;
       return amt;
     };
@@ -827,12 +951,11 @@
       return;
     }
 
-    // ---- 基礎工程
+    // ---- 基礎工程（油漆 + 水電 + 燈具）
     const baseProjects = [
-      { id: 'paint',      name: '油漆',  basePrice: 90000, basePing: 12, increment: 6000 },
+      { id: 'paint',      name: '油漆',  basePrice: 90000, basePing: 12, increment: 7500 },
       { id: 'electrical', name: '水電',  basePrice: 60000, basePing: 12, increment: 5000 },
-      { id: 'lighting',   name: '燈具',  basePrice: 45000, basePing: 12, increment: 3000 },
-      { id: 'glass',      name: '玻璃',  basePrice: 25000, basePing: 12, increment: 3000 }
+      { id: 'lighting',   name: '燈具',  basePrice: 45000, basePing: 12, increment: 3000 }
     ];
     baseProjects.forEach(p => {
       if (document.getElementById(p.id).checked) {
@@ -840,6 +963,19 @@
         addLine('基礎工程', p.name, 1, `基數${p.basePrice}+(${basePing}-12)*${p.increment}`, raw);
       }
     });
+
+    // 玻璃（下拉）
+    const pick = (selId, customId) => {
+      const sel = document.getElementById(selId);
+      const cus = document.getElementById(customId);
+      if (!sel) return 0;
+      let v = 0;
+      if (sel.value === 'custom' && cus && cus.value) v = parseFloat(cus.value) || 0;
+      else v = parseFloat(sel.value) || 0;
+      return R(v);
+    };
+    const glassVal = pick('glass_sel', 'glass_sel_custom');
+    if (glassVal > 0) addLine('基礎工程', '玻璃', 1, '選項', glassVal);
 
     // ---- 木作工程
     const woodworkItems = [
@@ -865,13 +1001,26 @@
       }
     });
 
+    // 冷氣出風口（下拉 + 口數）
+    const acOutletPrice = pick('ac_outlet', 'ac_outlet_custom');
+    const acOutletQty = parseFloat(document.getElementById('ac_outlet_qty').value) || 0;
+    if (acOutletPrice > 0 && acOutletQty > 0) {
+      woodworkTotal += addLine('木作工程', '冷氣出風口', acOutletQty, `${acOutletQty}口 × ${acOutletPrice}`, acOutletPrice * acOutletQty) || 0;
+    }
+
+    // 吊隱維修口
+    const hatchQty = parseFloat(document.getElementById('concealed_service_hatch').value) || 0;
+    if (hatchQty > 0) {
+      woodworkTotal += addLine('木作工程', '吊隱維修口', hatchQty, `${hatchQty}口 × 4500`, hatchQty * 4500) || 0;
+    }
+
     // ---- 床架
     let bedFramesSum = 0, idx = 1;
     document.querySelectorAll('.bed-frame-row').forEach(row => {
       const L = parseFloat(row.querySelector('.bed-frame-length').value) || 0;
       const W = parseFloat(row.querySelector('.bed-frame-width').value)  || 0;
       const amt = R(L * W);
-      row.querySelector('.bed-frame-total').value = amt.toLocaleString('zh-TW');
+      row.querySelector('.bed-frame-total').value = amt ? amt.toLocaleString('zh-TW') : '';
       if (amt > 0) {
         bedFramesSum += addLine('床架', `床架 ${idx++}`, 1, `${L}cm × ${W}cm × 1`, amt) || 0;
       }
@@ -901,6 +1050,12 @@
         systemTotal += addLine('系統櫃', item.name, v, `${v}${item.unit} × ${item.price}`, raw) || 0;
       }
     });
+    // 弧形隔屏
+    const curvedPrice = parseFloat(document.getElementById('curved_partition').value) || 0;
+    const curvedQty = parseFloat(document.getElementById('curved_partition_qty').value) || 0;
+    if (curvedPrice > 0 && curvedQty > 0) {
+      systemTotal += addLine('系統櫃', '弧形隔屏', curvedQty, `${curvedQty}組 × ${curvedPrice}`, curvedPrice * curvedQty) || 0;
+    }
     systemTotal += bedFramesSum;
 
     // ---- 鐵件拉門
@@ -917,15 +1072,6 @@
     addLine('開關面板', '開關面板', 1, spDesc, spPrice);
 
     // ---- 特殊工程（下拉＋自訂）
-    const pick = (selId, customId) => {
-      const sel = document.getElementById(selId);
-      const cus = document.getElementById(customId);
-      if (!sel) return 0;
-      let v = 0;
-      if (sel.value === 'custom' && cus && cus.value) v = parseFloat(cus.value) || 0;
-      else v = parseFloat(sel.value) || 0;
-      return R(v);
-    };
     const largeBoard   = pick('large_board',   'large_board_custom');
     const specialPaint = pick('special_paint', 'special_paint_custom');
     const ironwork     = pick('ironwork',      'ironwork_custom');
@@ -946,19 +1092,22 @@
       const v = parseFloat(document.getElementById(i.id).value) || 0;
       if (v > 0) addLine('其他單價項目', i.name, v, `${v}${i.unit} × ${i.price}`, v * i.price);
     });
+    const haul = pick('haulage','haulage_custom');
+    if (haul > 0) addLine('其他單價項目','清運',1,'選項', haul);
+    const demo = pick('demolition','demolition_custom');
+    if (demo > 0) addLine('其他單價項目','拆除',1,'選項', demo);
 
-    // ---- 鋁框 / 高門框
-    const others = [
-      { id: 'aluminum_40x70',   name: '鋁框吊框 40*70', price: 2300, unit: '樘' },
-      { id: 'aluminum_45x70',   name: '鋁框吊框 45*70', price: 2600, unit: '樘' },
-      { id: 'aluminum_50x70',   name: '鋁框吊框 50*70', price: 3000, unit: '樘' },
-      { id: 'tall_frame_40x240',name: '高門框 40*240',  price: 7500, unit: '樘' },
-      { id: 'tall_frame_45x240',name: '高門框 45*240',  price: 8500, unit: '樘' },
-      { id: 'tall_frame_50x240',name: '高門框 50*240',  price: 9500, unit: '樘' }
-    ];
-    others.forEach(i => {
-      const v = parseFloat(document.getElementById(i.id).value) || 0;
-      if (v > 0) addLine(i.name.includes('鋁框吊框') ? '鋁框吊框' : '高門框', i.name, v, `${v}${i.unit} × ${i.price}`, v * i.price);
+    // ---- 其他（自訂）項目
+    document.querySelectorAll('.custom-item-row').forEach(row => {
+      const name = row.querySelector('.ci-name').value.trim();
+      const price = parseFloat(row.querySelector('.ci-price').value) || 0;
+      const qty = parseFloat(row.querySelector('.ci-qty').value) || 0;
+      const unit = row.querySelector('.ci-unit').value.trim();
+      const amt = R(price * qty);
+      row.querySelector('.ci-total').value = amt ? amt.toLocaleString('zh-TW') : '';
+      if (name && amt > 0) {
+        addLine('其他（自訂）', name, qty, `${qty}${unit ? unit : ''} × ${price}`, amt);
+      }
     });
 
     // ---- 自動項目（依目前小計/逐步累加）
@@ -976,9 +1125,9 @@
     addLine('自動項目', '運費',     1, '系統小計 × 5%',  sysShipping);
     addLine('自動項目', '組裝費',   1, '系統小計 × 20%', sysAssembly);
 
-    const other10 = R(PRICING_STATE.total * 0.10);
-    document.getElementById('other_items').value = money(other10);
-    addLine('自動項目', '其他項目(10%)', 1, '目前小計 × 10%', other10);
+    const other3 = R(PRICING_STATE.total * 0.03);
+    document.getElementById('other_items').value = money(other3);
+    addLine('自動項目', '其他項目(3%)', 1, '目前小計 × 3%', other3);
 
     const supervision = R(PRICING_STATE.total * 0.08);
     document.getElementById('supervision_fee').value = money(supervision);
@@ -1002,10 +1151,8 @@
 
   // ========= 匯出 Excel =========
   function exportToExcel() {
-    // 確保有最新計算
     calculatePricing();
 
-    // 客戶資料
     const clientData = [
       ["客戶名稱", document.getElementById('client_name').value || '未填寫'],
       ["報價日期", document.getElementById('date').value || '未填寫'],
@@ -1015,7 +1162,6 @@
       ["基準坪數", document.getElementById('base_ping').value || '0']
     ];
 
-    // 依類別分組
     const grouped = {};
     PRICING_STATE.items.forEach(it => {
       if (!grouped[it.category]) grouped[it.category] = [];
@@ -1074,7 +1220,6 @@
     return obj;
   }
 
-  // 以雙路徑送出（先 application/json，失敗再 text/plain）
   async function _postPayload(url, payload){
     const bodyText = JSON.stringify(payload);
     const tryOnce = async (ctype) => {
@@ -1085,17 +1230,14 @@
       });
       const text = await resp.text();
       let data = null;
-      try { data = text ? JSON.parse(text) : null; } catch { /* 不是 JSON 就略過 */ }
+      try { data = text ? JSON.parse(text) : null; } catch { }
       return { resp, text, data };
     };
 
     let r = await tryOnce('application/json');
-
-    // 若後端拋出 Unexpected end 或 5xx，再以 text/plain 重送一次（給用 JSON.parse(req.body) 的實作吃）
     if (!r.resp.ok && ((r.text || '').includes('Unexpected end of JSON input') || r.resp.status >= 500)) {
       r = await tryOnce('text/plain');
     }
-
     if (!r.resp.ok) {
       const msg = (r.data && (r.data.error || r.data.message)) || r.text || `HTTP ${r.resp.status}`;
       throw new Error(msg);
@@ -1108,53 +1250,43 @@
     try{
       if (btn) { btn.disabled = true; btn.textContent = '儲存中…'; }
 
-      // 最新計算＋基本檢查
       calculatePricing();
       _validateBeforeSave();
 
-      // 收集表單
       const raw   = _collectRawForm();
       const style = getStyleValue();
       const room  = getRoomTypeValue();
 
-      // 金額全部正規化為整數
-      const other10    = _toInt(_parseMoney(document.getElementById('other_items').value));
+      const other3     = _toInt(_parseMoney(document.getElementById('other_items').value));
       const supervise8 = _toInt(_parseMoney(document.getElementById('supervision_fee').value));
       const tax5       = _toInt(_parseMoney(document.getElementById('tax').value));
       const grand      = _toInt(_parseMoney(document.getElementById('total-price').textContent));
 
-      // 僅送後端有的欄位（不要送 description/desc）
-const sanitizedItems = (PRICING_STATE.items || []).map(it => ({
-  category: String(it.category || ''),
-  name:     String(it.name || ''),
-  qty:      Number(it.qty || 0),
-  amount:   _toInt(it.amount || 0),
-  description: it.description ?? null
-}));
+      const sanitizedItems = (PRICING_STATE.items || []).map(it => ({
+        category: String(it.category || ''),
+        name:     String(it.name || ''),
+        qty:      Number(it.qty || 0),
+        amount:   _toInt(it.amount || 0),
+        description: it.description ?? null
+      }));
 
-
-      // payload
-const quote = {
-  quote_date: raw['date'] || null, // YYYY-MM-DD
-  client_name: raw['client_name'] || null,
-  address: raw['address'] || null,
-  style: style || null,
-  room_type: room || null,
-  base_ping: Number(raw['base_ping']) || null,
-  subtotal: Math.max(0, grand - other10 - supervise8 - tax5),
-  other_items: other10,
-  supervision_fee: supervise8,
-  tax: tax5,
-  grand_total: grand,
-  form: raw
-};
-
+      const quote = {
+        quote_date: raw['date'] || null,
+        client_name: raw['client_name'] || null,
+        address: raw['address'] || null,
+        style: style || null,
+        room_type: room || null,
+        base_ping: Number(raw['base_ping']) || null,
+        subtotal: Math.max(0, grand - other3 - supervise8 - tax5),
+        other_items: other3,
+        supervision_fee: supervise8,
+        tax: tax5,
+        grand_total: grand,
+        form: raw
+      };
 
       const payload = { quote, items: sanitizedItems };
-
-      // 送出（內含 fallback）
       const data = await _postPayload(API_URL, payload);
-
       alert('已儲存成功！編號：' + (data?.id || data?.insertedId || '—'));
     }catch(err){
       console.error('SAVE_QUOTE_ERROR:', err);
@@ -1164,12 +1296,14 @@ const quote = {
     }
   }
 
-  // ========= 讓 HTML onclick 找得到 =========
+  // ========= 對外 =========
   window.calculatePricing = calculatePricing;
   window.exportToExcel   = exportToExcel;
   window.saveQuote       = saveQuote;
   window.addBedFrame     = addBedFrame;
   window.removeBedFrame  = removeBedFrame;
+  window.addCustomItem   = addCustomItem;
+  window.removeCustomItem= removeCustomItem;
   window.getStyleValue   = getStyleValue;
   window.getRoomTypeValue= getRoomTypeValue;
 </script>
