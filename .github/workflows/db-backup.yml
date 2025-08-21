@@ -64,3 +64,33 @@ jobs:
           name: supabase-backup
           path: backups/*.dump
           retention-days: 7
+
+      - name: Connectivity test (psql)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          # 一定要包含 sslmode=require，且用 Direct 連線 (5432)
+          # 會印出時間，確認連得上
+          psql "$DATABASE_URL" -tAc "select now();"
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          TS="$(date -u +'%Y%m%d-%H%M%S')"
+          mkdir -p backups
+          # 使用 custom 格式（.dump）較適合還原/壓縮
+          pg_dump --dbname="$DATABASE_URL" \
+                  --no-owner \
+                  --format=custom \
+                  --file="backups/supabase-${TS}.dump"
+          ls -lh backups
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup
+          path: backups/*.dump
+          retention-days: 7
