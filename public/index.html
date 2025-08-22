@@ -234,7 +234,7 @@
             </div>
           </div>
 
-          <!-- 鐵件拉門（維持原本） -->
+          <!-- 鐵件拉門 -->
           <div class="card mb-4">
             <div class="card-header">
               <h5 class="card-title mb-0"><i class="fas fa-door-open me-2"></i>鐵件拉門</h5>
@@ -252,7 +252,7 @@
             </div>
           </div>
 
-          <!-- 開關面板（維持原本） -->
+          <!-- 開關面板 -->
           <div class="card mb-4">
             <div class="card-header">
               <h5 class="card-title mb-0"><i class="fas fa-toggle-on me-2"></i>開關面板</h5>
@@ -275,7 +275,7 @@
             </div>
           </div>
 
-          <!-- 石作工程（維持下拉） -->
+          <!-- 石作工程 -->
           <div class="card mb-4">
             <div class="card-header">
               <h5 class="card-title mb-0"><i class="fas fa-square me-2"></i>石作工程</h5>
@@ -297,7 +297,7 @@
             </div>
           </div>
 
-          <!-- 特殊漆工程（維持下拉） -->
+          <!-- 特殊漆工程 -->
           <div class="card mb-4">
             <div class="card-header">
               <h5 class="card-title mb-0"><i class="fas fa-paint-roller me-2"></i>特殊漆工程</h5>
@@ -319,7 +319,7 @@
             </div>
           </div>
 
-          <!-- 鐵件工程（維持下拉） -->
+          <!-- 鐵件工程 -->
           <div class="card mb-4">
             <div class="card-header">
               <h5 class="card-title mb-0"><i class="fas fa-tools me-2"></i>鐵件工程</h5>
@@ -341,7 +341,7 @@
             </div>
           </div>
 
-          <!-- 金屬工程（維持下拉） -->
+          <!-- 金屬工程 -->
           <div class="card mb-4">
             <div class="card-header">
               <h5 class="card-title mb-0"><i class="fas fa-cogs me-2"></i>金屬工程</h5>
@@ -544,6 +544,7 @@
     </div>
   </div>
 
+<!-- ======== 單一、乾淨的腳本區（整頁只有這一個 <script>） ======== -->
 <script>
   // ========= 共用工具 =========
   const R = (n) => Math.round(Number(n) || 0);
@@ -909,7 +910,8 @@
     });
 
     // ---- 自動項目
-    const woodworkHardware = R( ([...PRICING_STATE.items].filter(it=>it.category==='木作工程').reduce((s,i)=>s+i.amount,0)) * 0.05 );
+    const woodworkSubtotal = ([...PRICING_STATE.items].filter(it=>it.category==='木作工程').reduce((s,i)=>s+i.amount,0));
+    const woodworkHardware = R( woodworkSubtotal * 0.05 );
     document.getElementById('woodwork_hardware').value = money(woodworkHardware);
     addLine('自動項目', '木作五金', 1, '木作小計 × 5%', woodworkHardware);
 
@@ -947,11 +949,8 @@
     boxEl.innerHTML = html;
   }
 
-  // ========= 匯出 Excel =========
- <script>
-  // ====== 新增：中文金額（新台幣） ======
+  // ====== 中文金額（新台幣） ======
   function ntToChinese(n) {
-    // 只取整數
     const num = Math.round(Number(n) || 0);
     if (num === 0) return '零元整';
     const cnNums = ['零','壹','貳','參','肆','伍','陸','柒','捌','玖'];
@@ -961,11 +960,11 @@
     let chineseStr = '';
     let zeroCount = 0;
     for (let i = 0; i < integerNum.length; i++) {
-      const n = integerNum.charCodeAt(i) - 48;
+      const n2 = integerNum.charCodeAt(i) - 48;
       const p = integerNum.length - i - 1;
       const q = Math.floor(p / 4);
       const m = p % 4;
-      if (n === 0) {
+      if (n2 === 0) {
         zeroCount++;
         if (m === 0 && zeroCount < 4) {
           chineseStr += cnIntUnits[q];
@@ -974,14 +973,14 @@
       } else {
         if (zeroCount > 0) chineseStr += '零';
         zeroCount = 0;
-        chineseStr += cnNums[n] + cnIntRadice[m];
+        chineseStr += cnNums[n2] + cnIntRadice[m];
         if (m === 0) chineseStr += cnIntUnits[q];
       }
     }
     return '新台幣' + chineseStr + '元整';
   }
 
-  // ====== 新增：把我們的 PRICING_STATE 類別對應成「類似範本的章節名稱」與序號 ======
+  // ====== 匯出章節對應與排序 ======
   const CHAPTER_TITLE_MAP = {
     '木作工程': '木作工程',
     '床架': '櫃體工程',
@@ -995,60 +994,53 @@
     '金屬工程': '鐵件極鍍鈦工程',
     '其他單價項目': '其他工程',
     '開關面板': '水電工程',
-    '自動項目': '自動項目' // 會另行處理監工/稅額/其他% 是否列入表格
+    '自動項目': '自動項目'
   };
   const CN_ORDER = ['壹','貳','參','肆','伍','陸','柒','捌','玖','拾','拾壹','拾貳','拾參','拾肆','拾伍','拾陸','拾柒','拾捌','拾玖','貳拾'];
 
-  // ====== 新增：輔助：從 description 嘗試抓出「單位」 ======
-  function guessUnitFromDesc(desc) {
-    if (!desc) return '';
-    // 例如 "3尺 × 2500" / "2樘 × 33000" / "1空間 × 4500"
-    const m = String(desc).match(/^\s*\d+(?:\.\d+)?\s*([^\d×x\* ]+)\s*[×x\*]/);
-    return m ? m[1].trim() : '';
+  function mapChapterByCatName(it) {
+    if (it.category === '基礎工程') {
+      if (/油漆/.test(it.name)) return '油漆工程';
+      if (/水電|開關面板/.test(it.name)) return '水電工程';
+      if (/燈/.test(it.name)) return '燈飾工程';
+    }
+    return CHAPTER_TITLE_MAP[it.category] || it.category || '其他工程';
   }
 
-  // ====== 這段替換原本的 exportToExcel() ======
+  // ========= 匯出 Excel（依你的範本） =========
   function exportToExcel() {
-    // 先確保最新價格
     calculatePricing();
 
-    // 取頁首資料
     const company = '藝瓦室內裝修設計工程股份有限公司';
     const contact = '高 雄 市 鼓 山 區 美 術 東 二 路 80 號                 TEL：07-5866700             FAX：07-5866703';
     const title   = '工 程 預 估';
 
     const client  = document.getElementById('client_name').value || '';
     const dateISO = document.getElementById('date').value || '';
-    const dateStr = dateISO ? (dateISO.replace(/-/g,'/').replace(/^(\d{4})/, (y)=> String(Number(y)-1911))) : ''; // 轉民國年：114/08/10
-
+    const dateStr = dateISO ? (dateISO.replace(/-/g,'/').replace(/^(\d{4})/, (y)=> String(Number(y)-1911))) : '';
     const addr    = document.getElementById('address').value || '';
     const basePing= document.getElementById('base_ping').value || '';
 
-    // 小計/稅/總計 直接用畫面現有值，避免與 UI 規則不一致
-    const subtotal     = Math.round(Number(PRICING_STATE.total) || 0) - 
-                         Math.round(Number(String(document.getElementById('tax').value).replace(/[^\d.-]/g,'')) || 0);
-    const tax          = Math.round(Number(String(document.getElementById('tax').value).replace(/[^\d.-]/g,'')) || 0);
-    const grandTotal   = Math.round(Number(String(document.getElementById('total-price').textContent).replace(/[^\d.-]/g,'')) || 0);
+    // 以目前 PRICING_STATE.total 為主（內含監工/稅/其他3% 等）
+    const tax          = Math.round(_parseMoney(document.getElementById('tax').value));
+    const grandTotal   = Math.round(_parseMoney(document.getElementById('total-price').textContent));
+    const subtotal     = Math.max(0, grandTotal - tax); // 表尾小計（你的範本只有稅與總計，這裡仍提供一列小計）
 
-    // 依章節（類別）分組，並把自動項目中「監工/稅額」先排除，避免在表內+表尾重複
     const groupsRaw = {};
     (PRICING_STATE.items || []).forEach(it => {
-      const cat = CHAPTER_TITLE_MAP[it.category] || it.category || '其他工程';
+      const cat = mapChapterByCatName(it);
       if (!groupsRaw[cat]) groupsRaw[cat] = [];
-      // 跳過稅額(5%)，因為表尾有「稅額」；監工費可保留或獨立一章節
-      if (it.category === '自動項目' && /稅額/i.test(it.name)) return;
+      if (it.category === '自動項目' && /稅額/i.test(it.name)) return; // 稅額移到表尾
       groupsRaw[cat].push(it);
     });
 
-    // 若自動項目裡有監工費，獨立章節「監工費8%~10%」
     const supervisionItem = (PRICING_STATE.items || []).find(i => i.category === '自動項目' && /監工費/i.test(i.name));
     if (supervisionItem) {
       groupsRaw['監工費8%~10%'] = [supervisionItem];
     }
 
-    // 章節排序：照我們遇到的順序，但前面加上常見章節
     const PREFERRED_ORDER = [
-      '木作工程','櫃體工程','天花板工程','油漆工程','水電工程',
+      '木作工程','櫃體工程','天花板工程','油漆工程','水電工程','燈飾工程',
       '石材及大板加工','玻璃工程','鐵件極鍍鈦工程','鋁框工程','其他工程',
       '自動項目','監工費8%~10%'
     ];
@@ -1056,31 +1048,30 @@
     const orderedCats = PREFERRED_ORDER.filter(c => seen.has(c))
       .concat([...seen].filter(c => !PREFERRED_ORDER.includes(c)));
 
-    // === 組 AoA ===
     const rows = [];
-    // 抬頭三行
     rows.push([company]);
     rows.push([contact]);
     rows.push([title]);
-    // 業主/日期
     rows.push([`業主 : ${client}`, '', '', '', `日期：${dateStr}`]);
-    // 可加地址/坪數（視需要）
     if (addr || basePing) {
       rows.push([`地址：${addr}`, '', '', '', `坪數：${basePing}`]);
     } else {
       rows.push([]);
     }
-
-    // 表頭
     rows.push(['項目','名 稱','數量','單位','單價','總價','備註']);
 
-    // 逐章節輸出
     let chapterIdx = 0;
+    const guessUnitFromDesc = (desc) => {
+      if (!desc) return '';
+      const m = String(desc).match(/^\s*\d+(?:\.\d+)?\s*([^\d×x\* ]+)\s*[×x\*]/);
+      return m ? m[1].trim() : '';
+    };
+
     orderedCats.forEach(cat => {
       const list = (groupsRaw[cat] || []).filter(it => Math.round(Number(it.amount)||0) > 0);
       if (list.length === 0) return;
       const cn = CN_ORDER[chapterIdx] || '';
-      rows.push([`${cn}\t${cat}`]); // 章節列
+      rows.push([`${cn}\t${cat}`]);
       chapterIdx++;
 
       list.forEach((it, i) => {
@@ -1101,23 +1092,17 @@
       });
     });
 
-    // 表尾空一行
     rows.push([]);
-    // 表尾小計/稅額/總計 + 金額中文大寫
     rows.push(['', '', '', '小 計:', '', subtotal]);
     rows.push(['', '', '', '稅 額:', '', tax]);
     rows.push(['總計:', '', '', '', '元正', ntToChinese(grandTotal)]);
     rows.push([]);
-
-    // 備註（照範本示意）
     rows.push(['◆ 未含主燈/吊燈/壁燈/家具/窗簾/冷氣/陽台工程']);
     rows.push(['◆ 未含消防灑水改管/偵煙器移位/緊急壓扣未移/對講機移位工程/全式除濕機/IH爐']);
 
-    // 建立工作簿/工作表
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
-    // 欄寬
     ws['!cols'] = [
       { wch: 8 },   // 項目
       { wch: 38 },  // 名稱
@@ -1128,24 +1113,18 @@
       { wch: 28 }   // 備註
     ];
 
-    // 合併儲存格：抬頭/聯絡資訊/標題/業主與日期區塊
     ws['!merges'] = [
-      // A1:G1、A2:G2、A3:G3
       { s:{r:0,c:0}, e:{r:0,c:6} },
       { s:{r:1,c:0}, e:{r:1,c:6} },
       { s:{r:2,c:0}, e:{r:2,c:6} },
-      // A4:D4、E4:G4
       { s:{r:3,c:0}, e:{r:3,c:3} },
       { s:{r:3,c:4}, e:{r:3,c:6} },
-      // A5:D5、E5:G5（地址/坪數那行，若你不想合併可移除）
       { s:{r:4,c:0}, e:{r:4,c:3} },
       { s:{r:4,c:4}, e:{r:4,c:6} }
     ];
 
-    // 數字欄位（單價、總價）標成數字，讓 Excel 可加總
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let R = 0; R <= range.e.r; R++) {
-      // 第 4 列(索引 3)之後才有表格
       const cUnitPrice = 4, cAmount = 5;
       const cellUP = ws[XLSX.utils.encode_cell({ r:R, c:cUnitPrice })];
       const cellAmt= ws[XLSX.utils.encode_cell({ r:R, c:cAmount })];
@@ -1157,7 +1136,6 @@
     const ts = new Date().toISOString().slice(0,19).replace(/[-:T]/g,'');
     XLSX.writeFile(wb, `工程預估_${ts}.xlsx`);
   }
-</script>
 
   // ========= 儲存 =========
   function _collectRawForm(){
