@@ -14,6 +14,7 @@
   <style>
     .card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,.075); }
     .table td, .table th { vertical-align: middle; }
+    .text-truncate-1 { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -21,7 +22,7 @@
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h2 class="mb-0"><i class="fa-solid fa-magnifying-glass me-2"></i>歷史報價查詢</h2>
     <div>
-      <a href="./index.html" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-arrow-left me-1"></i>返回報價</a>
+      <a href="./index.html" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-plus me-1"></i>新增報價</a>
     </div>
   </div>
 
@@ -95,7 +96,7 @@
             <th>房型</th>
             <th class="text-end">坪數</th>
             <th class="text-end">總價</th>
-            <th>操作</th>
+            <th style="width:220px;">操作</th>
           </tr>
         </thead>
         <tbody id="tbody">
@@ -112,7 +113,11 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">報價詳情</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
+        <div class="ms-auto d-flex gap-2">
+          <a id="editLink" class="btn btn-primary btn-sm" target="_blank">前往編輯</a>
+          <button id="copyEditLink" class="btn btn-outline-secondary btn-sm">複製編輯連結</button>
+          <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="關閉"></button>
+        </div>
       </div>
       <div class="modal-body">
         <ul class="nav nav-tabs mb-3" role="tablist">
@@ -171,8 +176,11 @@
   const state = { page: 1, limit: 20, lastResp: null, lastQuery: {} };
   const $ = (s) => document.querySelector(s);
   const nt = (n)=> (n ?? 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 });
-  const fmtMoney = (n)=> 'NT$ ' + nt(Math.round(Number(n)||0));
+  const money = (n)=> 'NT$ ' + nt(Math.round(Number(n)||0));
   const fmtDate = (s)=> s ? String(s).slice(0,10) : '';
+
+  // 通用：抓 ID（相容 id/_id/_key）
+  const getId = (o)=> o?.id ?? o?._id ?? o?._key ?? '';
 
   async function apiGetJson(url, init = {}) {
     let resp = await fetch(url, { cache: 'no-store', ...init });
@@ -223,7 +231,8 @@
 
   function render(resp){
     const tbody = $('#tbody');
-    if(!resp || !Array.isArray(resp.items) || resp.items.length === 0){
+    const list = Array.isArray(resp?.items) ? resp.items : [];
+    if(list.length === 0){
       tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">沒有符合條件的資料</td></tr>';
       $('#summary').textContent = '共 0 筆';
       $('#prev').disabled = true;
@@ -231,28 +240,40 @@
       return;
     }
 
-    tbody.innerHTML = resp.items.map(r => `
-      <tr>
-        <td>${fmtDate(r.quote_date || r.created_at)}</td>
-        <td>${r.client_name ?? ''}</td>
-        <td>${r.style ?? ''}</td>
-        <td>${r.room_type ?? ''}</td>
-        <td class="text-end">${r.base_ping ?? ''}</td>
-        <td class="text-end">${fmtMoney(r.grand_total)}</td>
-        <td>
-          <button class="btn btn-sm btn-outline-info" onclick="showDetail('${r.id}')">
-            <i class="fa-solid fa-eye me-1"></i>查看
-          </button>
-        </td>
-      </tr>`
-    ).join('');
+    tbody.innerHTML = list.map(r => {
+      const id = getId(r);
+      const total = r.grand_total ?? r.total ?? 0;
+      const editHref = `./index.html?id=${encodeURIComponent(id)}`;
+      return `
+        <tr>
+          <td>${fmtDate(r.quote_date || r.created_at)}</td>
+          <td class="text-truncate-1" title="${r.client_name ?? ''}">${r.client_name ?? ''}</td>
+          <td>${r.style ?? ''}</td>
+          <td>${r.room_type ?? ''}</td>
+          <td class="text-end">${r.base_ping ?? ''}</td>
+          <td class="text-end">${money(total)}</td>
+          <td>
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-info" onclick="showDetail('${id}')">
+                <i class="fa-solid fa-eye me-1"></i>查看
+              </button>
+              <a class="btn btn-primary" href="${editHref}">
+                <i class="fa-solid fa-pen-to-square me-1"></i>編輯
+              </a>
+              <button class="btn btn-outline-secondary" onclick="copyLink('${editHref}')">
+                <i class="fa-solid fa-link me-1"></i>複製連結
+              </button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
 
     const totalTxt = (resp.total != null)
-      ? `共 ${resp.total.toLocaleString()} 筆，頁 ${resp.page}`
-      : `頁 ${resp.page}`;
+      ? `共 ${Number(resp.total).toLocaleString()} 筆，頁 ${resp.page ?? state.page}`
+      : `頁 ${resp.page ?? state.page}`;
     $('#summary').textContent = totalTxt;
 
-    $('#prev').disabled = (resp.page <= 1);
+    $('#prev').disabled = (Number(resp.page ?? state.page) <= 1);
     $('#next').disabled = (resp.hasNext === false);
   }
 
@@ -267,8 +288,8 @@
         r.style || '',
         r.room_type || '',
         r.base_ping ?? '',
-        Math.round(Number(r.grand_total)||0),
-        r.id
+        Math.round(Number(r.grand_total ?? r.total)||0),
+        getId(r)
       ]);
     });
     const wb = XLSX.utils.book_new();
@@ -278,23 +299,39 @@
     XLSX.writeFile(wb, `歷史報價_${ts}.xlsx`);
   }
 
+  function copyLink(path){
+    const url = (location.origin || '') + (path.startsWith('/') ? path : ('/' + path));
+    navigator.clipboard?.writeText(url).then(()=>{
+      alert('已複製：' + url);
+    }).catch(()=>{
+      prompt('無法自動複製，請手動複製：', url);
+    });
+  }
+
   async function showDetail(id){
     try{
       const row = await apiGetJson('/api/quote-detail?id=' + encodeURIComponent(id));
 
+      // 後端可能回 {quote, items} 或扁平；統一取值
+      const q = row.quote || row;
+      const items = Array.isArray(row.items) ? row.items
+                  : Array.isArray(row.quote_items) ? row.quote_items
+                  : Array.isArray(row.details) ? row.details
+                  : [];
+
       const base = [
-        { label:'日期', value: fmtDate(row.quote_date || row.created_at) },
-        { label:'客戶', value: row.client_name || '' },
-        { label:'地址', value: row.address || '' },
-        { label:'風格', value: row.style || '' },
-        { label:'房型', value: row.room_type || '' },
-        { label:'坪數', value: row.base_ping ?? '' },
-        { label:'小計', value: fmtMoney(row.subtotal) },
-        { label:'其他項目(10%)', value: fmtMoney(row.other_items) },
-        { label:'監工費(8%)', value: fmtMoney(row.supervision_fee) },
-        { label:'稅額(5%)', value: fmtMoney(row.tax) },
-        { label:'總價', value: fmtMoney(row.grand_total) },
-        { label:'編號', value: row.id }
+        { label:'日期', value: fmtDate(q.quote_date || q.created_at) },
+        { label:'客戶', value: q.client_name || '' },
+        { label:'地址', value: q.address || '' },
+        { label:'風格', value: q.style || '' },
+        { label:'房型', value: q.room_type || '' },
+        { label:'坪數', value: q.base_ping ?? '' },
+        { label:'小計', value: money(q.subtotal ?? (q.grand_total - (q.other_items||0) - (q.supervision_fee||0) - (q.tax||0))) },
+        { label:'其他項目(3%)', value: money(q.other_items) },
+        { label:'監工費(8%)', value: money(q.supervision_fee) },
+        { label:'稅額(5%)', value: money(q.tax) },
+        { label:'總價', value: money(q.grand_total ?? q.total) },
+        { label:'編號', value: getId(q) || id }
       ];
       $('#detailBase').innerHTML = base.map(b => `
         <div class="col-md-4">
@@ -304,7 +341,6 @@
           </div>
         </div>`).join('');
 
-      const items = Array.isArray(row.quote_items) ? row.quote_items : [];
       if(items.length === 0){
         $('#detailItemsBody').innerHTML =
           '<tr><td colspan="5" class="text-muted text-center">無明細</td></tr>';
@@ -312,20 +348,25 @@
       }else{
         let sub = 0;
         $('#detailItemsBody').innerHTML = items.map(it=>{
-          sub += Number(it.amount)||0;
+          const amt = Math.round(Number(it.amount)||0);
+          sub += amt;
           return `
             <tr>
               <td>${it.category ?? ''}</td>
               <td>${it.name ?? ''}</td>
               <td class="text-end">${it.qty ?? ''}</td>
               <td>${it.description ?? ''}</td>
-              <td class="text-end">${fmtMoney(it.amount)}</td>
+              <td class="text-end">${money(amt)}</td>
             </tr>`;
         }).join('');
-        $('#itemsSubtotal').textContent = fmtMoney(sub);
+        $('#itemsSubtotal').textContent = money(sub);
       }
 
-      $('#detailForm').textContent = JSON.stringify(row.form || {}, null, 2);
+      // 編輯連結
+      const editHref = `./index.html?id=${encodeURIComponent(getId(q) || id)}`;
+      const editA = document.getElementById('editLink');
+      editA.href = editHref;
+      document.getElementById('copyEditLink').onclick = ()=> copyLink(editHref);
 
       new bootstrap.Modal($('#detailModal')).show();
     }catch(err){
@@ -343,7 +384,7 @@
     });
     $('#btnExport').addEventListener('click', exportExcel);
     $('#prev').addEventListener('click', ()=> search(Math.max(1, state.page-1)));
-    $('#next').addEventListener('click', ()=> search(state.page+1));
+    $('#next').addEventListener('click', ()=> search((state.page||1)+1));
     search(1);
   });
 </script>
