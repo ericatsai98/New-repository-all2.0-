@@ -1014,16 +1014,25 @@
     const styleText  = getStyleValue();
     const roomText   = getRoomTypeValue();
 
-    // 依章節分組；排除自動項目的稅額（表尾統一）
-    const groupsRaw = {};
-    (PRICING_STATE.items || []).forEach(it => {
-      const cat = CHAPTER_TITLE_MAP[it.category] || it.category || '其他工程';
-      if (!groupsRaw[cat]) groupsRaw[cat] = [];
-      if (it.category === '自動項目' && /稅額/i.test(it.name)) return;
-      groupsRaw[cat].push(it);
-    });
-    const supervisionItem = (PRICING_STATE.items || []).find(i => i.category === '自動項目' && /監工費/i.test(i.name));
-    if (supervisionItem) groupsRaw['監工費8%~10%'] = [supervisionItem];
+// 依章節分組；排除自動項目的「稅額」與「監工費」（避免重複）
+const groupsRaw = {};
+(PRICING_STATE.items || []).forEach(it => {
+  // 稅額與監工費都不放在「自動項目」章節內
+  if (it.category === '自動項目' && (/稅額/i.test(it.name) || /監工費/i.test(it.name))) return;
+
+  const cat = CHAPTER_TITLE_MAP[it.category] || it.category || '其他工程';
+  if (!groupsRaw[cat]) groupsRaw[cat] = [];
+  groupsRaw[cat].push(it);
+});
+
+// 監工費改獨立章節（只保留一次）
+const supervisionItem = (PRICING_STATE.items || [])
+  .find(i => i.category === '自動項目' && /監工費/i.test(i.name));
+if (supervisionItem) {
+  // 名稱可以固定一下，避免顯示成多種寫法
+  groupsRaw['監工費8%~10%'] = [{ ...supervisionItem, name: '監工費(8%)' }];
+}
+
 
     const PREFERRED_ORDER = [
       '木作工程','櫃體工程','天花板工程','油漆工程','水電工程',
@@ -1084,11 +1093,11 @@
     const grandTotal = Math.round(Number(String(document.getElementById('total-price').textContent).replace(/[^\d.-]/g,'')) || 0);
     const subtotal   = Math.max(0, grandTotal - tax);
 
-    rows.push([]);
-    rows.push(['', '', '', '小 計:', '', subtotal]);
-    rows.push(['', '', '', '稅 額:', '', tax]);
-    rows.push(['總計:', '', '', '', '元正', ntToChinese(grandTotal)]);
-    rows.push([]);
+rows.push([]);
+rows.push(['', '', '', '小 計:', '', subtotal]);         // 小計數字落在「總價」欄
+rows.push(['', '', '', '稅 額:', '', tax]);             // 稅額數字落在「總價」欄
+rows.push(['總計:', '', '', '', '元正', ntToChinese(grandTotal)]); // 總計行顯示中文大寫
+rows.push([]);
     rows.push(['◆ 未含主燈/吊燈/壁燈/家具/窗簾/冷氣/陽台工程']);
     rows.push(['◆ 未含消防灑水改管/偵煙器移位/緊急壓扣未移/對講機移位工程/全式除濕機/IH爐']);
 
